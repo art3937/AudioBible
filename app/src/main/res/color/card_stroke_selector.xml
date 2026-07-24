@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Цвет обводки, когда карточка выделена (активирована) — яркий белый или золотой -->
+    <item android:state_activated="true" android:color="#FFFFFF" />
+
+    <!-- Цвет обводки по умолчанию для обычной карточки — полностью прозрачный -->
+    <item android:color="@android:color/transparent" />
+</selector>
