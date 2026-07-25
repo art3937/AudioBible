@@ -190,7 +190,11 @@ class TrackViewModel @Inject constructor(
     fun nextTrack() {
         val chapters = _chaptersData.value ?: return
         val nextIndex = currentPlayingPosition + 1
-        if (nextIndex >= chapters.size) return // нет следующего
+        if (nextIndex >= chapters.size) {
+            // если конца книги достигли — пробуем перейти к следующей книге
+            advanceToNextBook()
+            return
+        }
 
         // сохраняем позицию текущего трека
         val currentChapter = chapters.getOrNull(currentPlayingPosition)
@@ -205,6 +209,30 @@ class TrackViewModel @Inject constructor(
 
         _chaptersData.value = chapters.mapIndexed { i, c ->
             if (i == nextIndex) c.copy(isPlaying = true) else c.copy(isPlaying = false)
+        }
+    }
+
+    private fun advanceToNextBook() {
+        // Если currentBookId не задан, пытаемся начать с первой книги
+        val candidate = if (currentBookId <= 0) 1 else currentBookId + 1
+        if (candidate > 66) return // Нет следующей книги
+
+        // Загружаем главы новой книги в фоновом потоке и запускаем первую главу
+        viewModelScope.launch(Dispatchers.IO) {
+            val newChapters = repository.getChaptersForBook(context, candidate)
+            if (newChapters.isEmpty()) return@launch
+
+            currentBookId = candidate
+            currentPlayingPosition = 0
+            val first = newChapters[0]
+            currentPlayingChapterId = first.id
+
+            withContext(Dispatchers.Main) {
+                playerManager.startRawTrack(first.audioRawId, chapterName = first.name)
+                _chaptersData.value = newChapters.mapIndexed { i, c ->
+                    if (i == 0) c.copy(isPlaying = true) else c.copy(isPlaying = false)
+                }
+            }
         }
     }
 
