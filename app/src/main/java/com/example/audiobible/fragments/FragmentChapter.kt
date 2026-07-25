@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
+import com.example.audiobible.R
 import android.widget.Toast
 import androidx.fragment.app.Fragment
 import androidx.fragment.app.activityViewModels
@@ -75,7 +76,7 @@ class FragmentChapter() : Fragment(), AdapterChapters.OnAudioClickListener {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.playerState.collectLatest { state ->
                     if (state.total > 0) {
-                        binding.layoutMiniPlayer.visibility = View.VISIBLE
+                            showMiniPlayer()
                         binding.textMiniPlayerTitle.text = state.name
                         binding.seekBarMiniPlayer.max = state.total
 
@@ -86,7 +87,7 @@ class FragmentChapter() : Fragment(), AdapterChapters.OnAudioClickListener {
 
                         binding.textTotalTime.text = state.totalStr
                     } else {
-                        binding.layoutMiniPlayer.visibility = View.GONE
+                            hideMiniPlayer()
                     }
 
                     val iconRes = if (state.isPlaying) R.drawable.pause else R.drawable.play
@@ -160,7 +161,7 @@ class FragmentChapter() : Fragment(), AdapterChapters.OnAudioClickListener {
                 override fun handleOnBackPressed() {
                     viewModel.pauseTrack()
                     // 2. Находим и скрываем карточку плеера в Activity
-                    binding.layoutMiniPlayer.visibility = View.GONE
+                    hideMiniPlayer()
 
 
                     // 3. СРАЗУ выходим из фрагмента назад (без блокировки через return)
@@ -180,6 +181,30 @@ class FragmentChapter() : Fragment(), AdapterChapters.OnAudioClickListener {
         viewModel.toggleChapter(item, position)
     }
 
+
+    private fun showMiniPlayer() {
+        binding.layoutMiniPlayer.apply {
+            if (visibility != View.VISIBLE) {
+                // быстрый слайд вверх с появлением
+                visibility = View.VISIBLE
+                alpha = 0f
+                translationY = 50f
+                animate().alpha(1f).translationY(0f).setDuration(250).start()
+            }
+        }
+    }
+
+    private fun hideMiniPlayer() {
+        binding.layoutMiniPlayer.apply {
+            if (visibility == View.VISIBLE) {
+                animate().alpha(0f).translationY(50f).setDuration(200).withEndAction {
+                    visibility = View.GONE
+                    alpha = 1f
+                    translationY = 0f
+                }.start()
+            }
+        }
+    }
 
     override fun onDestroyView() {
         super.onDestroyView()
