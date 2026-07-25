@@ -19,4 +19,21 @@
     <path
         android:fillColor="#F6C85F"
         android:pathData="M34,30h4v56h-4z" />
+    <!-- Cross (крестик) overlay centered on icon -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M36,36 L72,72" />
+
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="6"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M72,36 L36,72" />
+
 </vector>
