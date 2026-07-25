@@ -43,6 +43,18 @@ class TrackViewModel @Inject constructor(
 
     init {
 //        restoreLastGlobalTrack()
+        // Автопереключение на следующий трек при окончании текущего
+        viewModelScope.launch {
+            var lastIsCompleted = false
+            playerManager.progressState.collect { state ->
+                val nowCompleted = state.isTrackCompleted
+                if (!lastIsCompleted && nowCompleted) {
+                    // трек только что завершился
+                    nextTrack()
+                }
+                lastIsCompleted = nowCompleted
+            }
+        }
     }
 
     fun getCurrentPosition(): Int = currentPlayingPosition
