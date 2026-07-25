@@ -6,7 +6,13 @@ import android.view.View
 import android.view.ViewGroup
 import android.widget.Toast
 import androidx.fragment.app.Fragment
-import androidx.fragment.app.viewModels
+import androidx.fragment.app.activityViewModels
+import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.repeatOnLifecycle
+import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.launch
+import androidx.lifecycle.Lifecycle
+import android.widget.SeekBar
 import androidx.recyclerview.widget.LinearLayoutManager
 import com.example.audiobible.adapter.AdapterChapters
 import com.example.audiobible.databinding.FragmentNewChapterBinding
@@ -21,7 +27,9 @@ class FragmentChapter() : Fragment(), AdapterChapters.OnAudioClickListener {
     private val binding get() = _binding!!
     private lateinit var booksAdapter: AdapterChapters
 
-    private val viewModel: TrackViewModel by viewModels()
+    private var isUserTrackingSeekBar = false
+
+    private val viewModel: TrackViewModel by activityViewModels()
 
 
     override fun onCreateView(
@@ -62,6 +70,89 @@ class FragmentChapter() : Fragment(), AdapterChapters.OnAudioClickListener {
             booksAdapter.submitList(tracks)
         }
 
+        // Подписка на состояние плеера и управление мини-плеером (перенесено из AppActivity)
+        viewLifecycleOwner.lifecycleScope.launch {
+            viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                viewModel.playerState.collectLatest { state ->
+                    if (state.total > 0) {
+                        binding.layoutMiniPlayer.visibility = View.VISIBLE
+                        binding.textMiniPlayerTitle.text = state.name
+                        binding.seekBarMiniPlayer.max = state.total
+
+                        if (!isUserTrackingSeekBar) {
+                            binding.seekBarMiniPlayer.progress = state.current
+                            binding.textCurrentTime.text = state.currentStr
+                        }
+
+                        binding.textTotalTime.text = state.totalStr
+                    } else {
+                        binding.layoutMiniPlayer.visibility = View.GONE
+                    }
+
+                    val iconRes = if (state.isPlaying) R.drawable.pause else R.drawable.play
+                    binding.buttonMiniPlayerPlayPause.setImageResource(iconRes)
+                }
+            }
+        }
+
+        // Обработка клика Play/Pause мини-плеера
+        binding.buttonMiniPlayerPlayPause.setOnClickListener {
+            val isPlaying = viewModel.playerState.value.isPlaying
+            if (isPlaying) {
+                viewModel.pauseTrack()
+                val currentChapters = viewModel.chaptersData.value ?: emptyList()
+                val currentChapter = currentChapters.getOrNull(viewModel.getCurrentPosition())
+                if (currentChapter != null) {
+                    viewModel.saveCurrentPlaybackPosition(currentChapter)
+                }
+            } else {
+                viewModel.resumeTrack()
+            }
+        }
+
+        // Обработка перемотки через SeekBar
+        binding.seekBarMiniPlayer.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
+                if (fromUser) {
+                    binding.textCurrentTime.text = String.format("%02d:%02d", (progress / 1000) / 60, (progress / 1000) % 60)
+                }
+            }
+
+            override fun onStartTrackingTouch(seekBar: SeekBar?) {
+                isUserTrackingSeekBar = true
+            }
+
+            override fun onStopTrackingTouch(seekBar: SeekBar) {
+                viewModel.seekTo(binding.seekBarMiniPlayer.progress)
+                isUserTrackingSeekBar = false
+                val chapters = viewModel.chaptersData.value ?: emptyList()
+                val currentChapter = chapters.getOrNull(viewModel.getCurrentPosition())
+                if (currentChapter != null) {
+                    viewModel.saveCurrentPlaybackPosition(currentChapter)
+                }
+            }
+        })
+
+        // Кнопки перемотки 15 секунд
+        binding.buttonMiniPlayerRewind.setOnClickListener {
+            viewModel.rewind15Seconds()
+            val currentChapters = viewModel.chaptersData.value ?: emptyList()
+            val currentChapter = currentChapters.getOrNull(viewModel.getCurrentPosition())
+            if (currentChapter != null) {
+                viewModel.saveCurrentPlaybackPosition(currentChapter)
+            }
+        }
+
+        binding.buttonMiniPlayerForward.setOnClickListener {
+            viewModel.forward15Seconds()
+            val currentChapters = viewModel.chaptersData.value ?: emptyList()
+            val currentChapter = currentChapters.getOrNull(viewModel.getCurrentPosition())
+            if (currentChapter != null) {
+                viewModel.saveCurrentPlaybackPosition(currentChapter)
+            }
+        }
+
+
         // МЕХАНИЗМ ПЕРЕОПРЕДЕЛЕНИЯ КНОПКИ НАЗАД + ПАУЗА И ВЫХОД
         requireActivity().onBackPressedDispatcher.addCallback(
             viewLifecycleOwner,
@@ -69,8 +160,7 @@ class FragmentChapter() : Fragment(), AdapterChapters.OnAudioClickListener {
                 override fun handleOnBackPressed() {
                     viewModel.pauseTrack()
                     // 2. Находим и скрываем карточку плеера в Activity
-                    val cardMiniPlayer = requireActivity().findViewById<View>(com.example.audiobible.R.id.layoutMiniPlayer)
-                    cardMiniPlayer.visibility = View.GONE
+                    binding.layoutMiniPlayer.visibility = View.GONE
 
 
                     // 3. СРАЗУ выходим из фрагмента назад (без блокировки через return)
