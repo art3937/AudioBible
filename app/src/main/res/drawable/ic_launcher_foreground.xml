@@ -20,22 +20,18 @@
         android:fillColor="#F6C85F"
         android:pathData="M34,30h4v56h-4z" />
     <!-- Cross (крестик) overlay centered on icon -->
-    <line
-        android:x1="36"
-        android:y1="36"
-        android:x2="72"
-        android:y2="72"
-        android:stroke="#FFFFFF"
-        android:strokeWidth="6"
-        android:strokeLineCap="round" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:fillColor="@android:color/transparent"
+        android:pathData="M 40,40 L 68,68" />
 
-    <line
-        android:x1="72"
-        android:y1="36"
-        android:x2="36"
-        android:y2="72"
-        android:stroke="#FFFFFF"
-        android:strokeWidth="6"
-        android:strokeLineCap="round" />
+    <path
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="5"
+        android:strokeLineCap="round"
+        android:fillColor="@android:color/transparent"
+        android:pathData="M 68,40 L 40,68" />
 
 </vector>
