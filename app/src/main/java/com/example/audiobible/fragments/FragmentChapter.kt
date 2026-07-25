@@ -153,6 +153,15 @@ class FragmentChapter() : Fragment(), AdapterChapters.OnAudioClickListener {
             }
         }
 
+        // Переключение на следующий/предыдущий трек
+        binding.buttonPrevTrack.setOnClickListener {
+            viewModel.previousTrack()
+        }
+
+        binding.buttonNextTrack.setOnClickListener {
+            viewModel.nextTrack()
+        }
+
 
         // МЕХАНИЗМ ПЕРЕОПРЕДЕЛЕНИЯ КНОПКИ НАЗАД + ПАУЗА И ВЫХОД
         requireActivity().onBackPressedDispatcher.addCallback(

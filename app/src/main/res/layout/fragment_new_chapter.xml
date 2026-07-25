@@ -14,13 +14,13 @@ tools:context=".fragments.AppActivity">
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:alpha="0.3"
-    android:scaleType="fitCenter"
+    android:scaleType="centerCrop"
     app:layout_constraintBottom_toBottomOf="parent"
     app:layout_constraintEnd_toEndOf="parent"
     app:layout_constraintStart_toStartOf="parent"
     app:layout_constraintTop_toTopOf="parent"
     app:shapeAppearanceOverlay="@style/ShapeAppearance.Material3.Corner.Large"
-    tools:src="@android:drawable/sym_def_app_icon" />
+    tools:src="@drawable/fon" />
 
 
 <!-- Список треков -->
@@ -92,11 +92,23 @@ tools:context=".fragments.AppActivity">
                 android:gravity="center"
                 android:orientation="horizontal">
 
+                <!-- Предыдущий трек -->
+                <ImageButton
+                    android:id="@+id/buttonPrevTrack"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:layout_marginEnd="8dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Предыдущий трек"
+                    android:src="@android:drawable/ic_media_previous"
+                    app:tint="?attr/colorOnSurface" />
+
+                <!-- Кнопка Назад на 15 секунд -->
                 <ImageButton
                     android:id="@+id/buttonMiniPlayerRewind"
                     android:layout_width="48dp"
                     android:layout_height="48dp"
-                    android:layout_marginEnd="24dp"
+                    android:layout_marginEnd="16dp"
                     android:background="@drawable/bg_mini_player_button"
                     android:contentDescription="Назад на 15 секунд"
                     android:foreground="?attr/selectableItemBackgroundBorderless"
@@ -104,6 +116,7 @@ tools:context=".fragments.AppActivity">
                     android:src="@android:drawable/ic_media_rew"
                     app:tint="?attr/colorOnSurface" />
 
+                <!-- Кнопка Play/Pause по центру -->
                 <ImageButton
                     android:id="@+id/buttonMiniPlayerPlayPause"
                     android:layout_width="64dp"
@@ -115,16 +128,28 @@ tools:context=".fragments.AppActivity">
                     android:src="@drawable/play"
                     app:tint="?attr/colorOnSurface" />
 
+                <!-- Кнопка Вперед на 15 секунд -->
                 <ImageButton
                     android:id="@+id/buttonMiniPlayerForward"
                     android:layout_width="48dp"
                     android:layout_height="48dp"
-                    android:layout_marginStart="24dp"
+                    android:layout_marginStart="16dp"
                     android:background="@drawable/bg_mini_player_button"
                     android:contentDescription="Вперед на 15 секунд"
                     android:foreground="?attr/selectableItemBackgroundBorderless"
                     android:padding="10dp"
                     android:src="@android:drawable/ic_media_ff"
+                    app:tint="?attr/colorOnSurface" />
+
+                <!-- Следующий трек -->
+                <ImageButton
+                    android:id="@+id/buttonNextTrack"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:layout_marginStart="8dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Следующий трек"
+                    android:src="@android:drawable/ic_media_next"
                     app:tint="?attr/colorOnSurface" />
             </LinearLayout>
 

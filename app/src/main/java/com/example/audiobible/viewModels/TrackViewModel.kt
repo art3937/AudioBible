@@ -175,6 +175,47 @@ class TrackViewModel @Inject constructor(
         }
     }
 
+    fun nextTrack() {
+        val chapters = _chaptersData.value ?: return
+        val nextIndex = currentPlayingPosition + 1
+        if (nextIndex >= chapters.size) return // нет следующего
+
+        // сохраняем позицию текущего трека
+        val currentChapter = chapters.getOrNull(currentPlayingPosition)
+        if (currentChapter != null) {
+            saveCurrentPlaybackPosition(currentChapter)
+        }
+
+        val next = chapters[nextIndex]
+        currentPlayingChapterId = next.id
+        currentPlayingPosition = nextIndex
+        playerManager.startRawTrack(next.audioRawId, chapterName = next.name)
+
+        _chaptersData.value = chapters.mapIndexed { i, c ->
+            if (i == nextIndex) c.copy(isPlaying = true) else c.copy(isPlaying = false)
+        }
+    }
+
+    fun previousTrack() {
+        val chapters = _chaptersData.value ?: return
+        val prevIndex = currentPlayingPosition - 1
+        if (prevIndex < 0) return // нет предыдущего
+
+        val currentChapter = chapters.getOrNull(currentPlayingPosition)
+        if (currentChapter != null) {
+            saveCurrentPlaybackPosition(currentChapter)
+        }
+
+        val prev = chapters[prevIndex]
+        currentPlayingChapterId = prev.id
+        currentPlayingPosition = prevIndex
+        playerManager.startRawTrack(prev.audioRawId, chapterName = prev.name)
+
+        _chaptersData.value = chapters.mapIndexed { i, c ->
+            if (i == prevIndex) c.copy(isPlaying = true) else c.copy(isPlaying = false)
+        }
+    }
+
     fun seekTo(positionMs: Int) { playerManager.seekTo(positionMs) }
 
     fun pauseTrack() {
