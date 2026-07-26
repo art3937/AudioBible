@@ -64,12 +64,14 @@ class FeedFragment : Fragment() {
             // Сообщаем ViewModel о выборе книги — LiveData сама обновит список
             viewModel.selectBook(clickedBook.id)
 
+
             findNavController().navigate(
                 R.id.action_feedFragment_to_fragmentChapter2,
 
 //                    chapterId = clickedBook.id
                    Bundle().apply {
                         putInt("ARG_BOOK_ID", clickedBook.id) // Передаем именно Int!
+                       putString("ARG_BOOK_NAME", clickedBook.name) // Передаем именно Int!
                     }
                 )
         }

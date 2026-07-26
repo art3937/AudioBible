@@ -32,15 +32,40 @@ class FragmentChapter() : Fragment(), AdapterChapters.OnAudioClickListener {
 
     private val viewModel: TrackViewModel by activityViewModels()
 
+    private var nameBook = ""
 
+    private var isMenuOpen = false
     override fun onCreateView(
         inflater: LayoutInflater,
         container: ViewGroup?,
         savedInstanceState: Bundle?
     ): View {
         _binding = FragmentNewChapterBinding.inflate(inflater, container, false)
+
+
+
+
+// При открытии фрагмента или при выборе книги
+        binding.tvBookTitle.text = nameBook
+
+        binding.btnBack.setOnClickListener {
+            requireActivity().onBackPressedDispatcher.onBackPressed()
+        }
+
+        binding.btnMenu.setOnClickListener {
+            val targetY = if (isMenuOpen) binding.menuPanel.height else 0f
+            binding.menuPanel.animate()
+             //   .translationY(targetY)
+                .setDuration(300)
+                .withEndAction { isMenuOpen = !isMenuOpen }
+                .start()
+        }
+
+
         return binding.root
     }
+
+
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
@@ -58,15 +83,18 @@ class FragmentChapter() : Fragment(), AdapterChapters.OnAudioClickListener {
             }
         )
         val idOfBook = arguments?.getInt("ARG_BOOK_ID") ?: 1
+         nameBook = arguments?.getString("ARG_BOOK_NAME") ?: "Null"
         viewModel.loadChapters(idOfBook)
-//viewModel.loadChapters(arguments?.bookId ?: 0)
-
+        // Обращаемся к MainActivity и меняем тулбар
+        (activity as? AppActivity)?.changeToolbar(
+            title = nameBook
+        )
         binding.recyclerViewChapter.apply {
             layoutManager = LinearLayoutManager(requireContext())
             adapter = booksAdapter
         }
 
-        // 3. Создаем красивый тестовый список книг
+        // 3. Создаем красивый тестовый список глав
         viewModel.chaptersData.observe(viewLifecycleOwner) { tracks ->
             booksAdapter.submitList(tracks)
         }
@@ -77,9 +105,8 @@ class FragmentChapter() : Fragment(), AdapterChapters.OnAudioClickListener {
                 viewModel.playerState.collectLatest { state ->
                     if (state.total > 0) {
                             showMiniPlayer()
-                        binding.textMiniPlayerTitle.text = state.name
+                        binding.textMiniPlayerTitle.text = "$nameBook " + state.name
                         binding.seekBarMiniPlayer.max = state.total
-
                         if (!isUserTrackingSeekBar) {
                             binding.seekBarMiniPlayer.progress = state.current
                             binding.textCurrentTime.text = state.currentStr
@@ -187,7 +214,7 @@ class FragmentChapter() : Fragment(), AdapterChapters.OnAudioClickListener {
         if (position == -1) return
 
         // Просто отдаем команду во ViewModel, передавая главу и её позицию в адаптере
-        viewModel.toggleChapter(item, position)
+        viewModel.toggleChapter(item, position, bookName = nameBook)
     }
 
 

@@ -8,6 +8,7 @@ import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
 import com.example.audiobible.bd.BookState
+import com.example.audiobible.dao.BibleDao
 import com.example.audiobible.dto.Book
 import com.example.audiobible.repository.BibleRepository
 import com.example.audiobible.repository.BookStateRepository
@@ -27,6 +28,7 @@ import javax.inject.Inject
 class BookViewModel @Inject constructor(
     private val repo: BookStateRepository,
     private val bibleRepo: BibleRepository,
+    private val bibleDao: BibleDao,
     private val savedStateHandle: SavedStateHandle
 ) : ViewModel() {
 
@@ -100,6 +102,12 @@ class BookViewModel @Inject constructor(
     }
 
     fun getBooks(): List<Book> = bibleRepo.getTestBooks()
+
+    fun deleteHistoryBd(){
+        viewModelScope.launch {
+            bibleDao.clearAllPlaybackHistory()
+        }
+    }
 }
 
 

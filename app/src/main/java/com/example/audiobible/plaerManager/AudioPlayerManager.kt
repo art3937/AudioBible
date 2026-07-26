@@ -109,7 +109,7 @@ class AudioPlayerManager @Inject constructor(@ApplicationContext context: Contex
     }
 
     //Для локальных файлов
-    fun startRawTrack(rawResourceId: Int,startPositionMs: Long = 0L,chapterName: String = "", bookName: String = "Библия") {
+    fun startRawTrack(rawResourceId: Int,startPositionMs: Long = 0L,chapterName: String = "", bookName: String = "") {
         // Безопасный сборщика URI через стандартный Android SDK:
         // Результат будет в формате: android.resource://имя_пакета_приложения/идентификатор_ресурса
         val uri = Uri.Builder()

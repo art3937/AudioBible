@@ -69,7 +69,7 @@ class TrackViewModel @Inject constructor(
         }
     }
 
-    fun toggleChapter(chapter: AudioItem, position: Int) {
+    fun toggleChapter(chapter: AudioItem, position: Int, bookName: String = "Библия") {
         val isPlayingCurrent = currentPlayingChapterId == chapter.id && playerManager.isPlaying
 
         if (isPlayingCurrent) {
