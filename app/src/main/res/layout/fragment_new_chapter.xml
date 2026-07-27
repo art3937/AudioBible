@@ -19,8 +19,7 @@ tools:context=".fragments.AppActivity">
     app:layout_constraintEnd_toEndOf="parent"
     app:layout_constraintStart_toStartOf="parent"
     app:layout_constraintTop_toTopOf="parent"
-    app:shapeAppearanceOverlay="@style/ShapeAppearance.Material3.Corner.Large"
-    tools:src="@drawable/fon" />
+    app:shapeAppearanceOverlay="@style/ShapeAppearance.Material3.Corner.Large" />
 
 
 <!-- Список треков -->
@@ -46,6 +45,7 @@ tools:context=".fragments.AppActivity">
         android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
         android:visibility="gone"
+        tools:visibility="visible"
         app:cardBackgroundColor="?attr/colorSurface"
         app:cardCornerRadius="12dp"
         app:cardElevation="4dp"
@@ -54,6 +54,18 @@ tools:context=".fragments.AppActivity">
         app:layout_constraintEnd_toEndOf="parent">
 
         <ImageView
+            android:id="@+id/imageViewArrow"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_gravity="end"
+            android:alpha="0.25"
+            android:tint="@color/black"
+            android:scaleType="centerCrop"
+            android:src="@android:drawable/arrow_down_float"
+            />
+
+        <ImageView
+            android:id="@+id/imageViewArrow"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:maxHeight="200dp"

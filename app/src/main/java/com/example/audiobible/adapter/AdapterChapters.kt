@@ -1,7 +1,10 @@
 package com.example.audiobible.adapter
 
 import android.graphics.Color
+import android.text.SpannableStringBuilder
+import android.text.style.ForegroundColorSpan
 import android.view.LayoutInflater
+import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageButton
 import androidx.core.graphics.toColorInt
@@ -10,8 +13,8 @@ import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.example.audiobible.databinding.ChaptersAudioBinding
-// Проверьте этот импорт
 import com.example.audiobible.dto.AudioItem
+import java.io.IOException
 
 class AdapterChapters(
     private val listener: OnAudioClickListener,
@@ -19,7 +22,8 @@ class AdapterChapters(
 ) : ListAdapter<AudioItem, AdapterChapters.ChapterViewHolder>(ChapterDiffCallback()) {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ChapterViewHolder {
-        val binding = ChaptersAudioBinding.inflate(LayoutInflater.from(parent.context),
+        val binding = ChaptersAudioBinding.inflate(
+            LayoutInflater.from(parent.context),
             parent,
             false
         )
@@ -27,38 +31,38 @@ class AdapterChapters(
     }
 
     override fun onBindViewHolder(holder: ChapterViewHolder, position: Int) {
-        holder.bind(getItem(position))
+        holder.bind(getItem(position), listener, onChapterClick)
     }
-
-
-
 
     interface OnAudioClickListener {
         fun onPlayPauseClick(item: AudioItem)
-
     }
-    inner class ChapterViewHolder(
+
+    class ChapterViewHolder(
         private val binding: ChaptersAudioBinding
     ) : RecyclerView.ViewHolder(binding.root) {
 
-        // Выносим кнопку наружу, если она нужна в onBindViewHolder,
-        // но лучше управлять состоянием прямо внутри bind()
         val playPauseButton: ImageButton = binding.buttonPlayPause
 
-
-        fun bind(item: AudioItem) {
-            // Убедитесь, что внутри вашего XML (chapters_audio.xml)
-            // есть ID: textViewTitle и layoutBackground (или замените на свои)
+        fun bind(
+            item: AudioItem,
+            listener: OnAudioClickListener,
+            onChapterClick: (AudioItem) -> Unit
+        ) {
             binding.textViewTitle.text = item.name
+
+            // Состояние кнопки аудио-плеера
             val iconRes = if (item.isPlaying) R.drawable.pause else R.drawable.play
             binding.buttonPlayPause.setImageResource(iconRes)
+
+            // Фоновый цвет карточки
             try {
-                // Если у AudioItem есть цвет, используем его, иначе — заглушку
                 binding.layoutBackground.setBackgroundColor("#2C5282".toColorInt())
             } catch (e: Exception) {
                 binding.layoutBackground.setBackgroundColor(Color.DKGRAY)
             }
 
+            // Клик по кнопке Play/Pause аудиозаписи
             playPauseButton.setOnClickListener {
                 val position = bindingAdapterPosition
                 if (position != RecyclerView.NO_POSITION) {
@@ -66,10 +70,67 @@ class AdapterChapters(
                 }
             }
 
-//            // Клик по элементу списка
-//            binding.root.setOnClickListener {
-//                onChapterClick(item)
-//            }
+            // Важный сброс видимости текста и угла стрелочки при прокрутке списка
+            binding.textViewChapterContent.visibility = View.GONE
+            binding.imageViewArrow.rotation = 0f
+
+            // Функция управления раскрытием текста, его покраской и анимацией стрелочки
+            fun toggleExpandState() {
+                val isVisible = binding.textViewChapterContent.visibility == View.VISIBLE
+
+                if (isVisible) {
+                    binding.textViewChapterContent.visibility = View.GONE
+                    binding.imageViewArrow.animate().rotation(0f).setDuration(200).start()
+                } else {
+                    val context = itemView.context
+                    try {
+                        // 1. Читаем чистый текст из assets
+                        val rawText = context.assets.open(item.textPath).bufferedReader().use { it.readText() }
+
+                        // 2. Создаем SpannableStringBuilder для раскраски отдельных частей текста
+                        val spannableBuilder = SpannableStringBuilder(rawText)
+
+                        // Регулярное выражение ищет цифры в начале строк (например: "1.", "12.")
+                        val regex = """(?m)^\d+\.""".toRegex()
+                        val matchResults = regex.findAll(rawText)
+
+                        // Задаем цвет для номеров стихов (сейчас стоит золотисто-оранжевый #FF9800)
+                        val numColor = "#FF9800".toColorInt()
+
+                        // Пробегаемся по всем найденным цифрам и красим их
+                        for (match in matchResults) {
+                            spannableBuilder.setSpan(
+                                ForegroundColorSpan(numColor),
+                                match.range.first,
+                                match.range.last + 1, // Захватываем саму цифру и точку после неё
+                                android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
+                            )
+                        }
+
+                        // 3. Сетим красивый текст в TextView
+                        binding.textViewChapterContent.text = spannableBuilder
+                        binding.textViewChapterContent.visibility = View.VISIBLE
+                        binding.imageViewArrow.animate().rotation(180f).setDuration(200).start()
+
+                    } catch (e: IOException) {
+                        e.printStackTrace()
+                        binding.textViewChapterContent.text = "Текст главы временно недоступен"
+                        binding.textViewChapterContent.visibility = View.VISIBLE
+                    }
+                }
+            }
+
+            // Нажатие на название главы ИЛИ на саму галочку гарантированно открывает текст
+            binding.textViewTitle.setOnClickListener { toggleExpandState() }
+            binding.imageViewArrow.setOnClickListener { toggleExpandState() }
+
+            // Клик по всей карточке элемента списка
+            binding.root.setOnClickListener {
+                val position = bindingAdapterPosition
+                if (position != RecyclerView.NO_POSITION) {
+                    onChapterClick(item)
+                }
+            }
         }
     }
 

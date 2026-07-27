@@ -1,13 +1,13 @@
-package com.example.audiobible.repository // Проверьте имя вашего пакета
+package com.example.audiobible.repository
 
 import android.content.Context
 import com.example.audiobible.R
 import com.example.audiobible.dto.AudioItem
-import dagger.hilt.android.qualifiers.ApplicationContext
+import java.io.IOException
 import javax.inject.Inject
 import javax.inject.Singleton
 
-@Singleton // Если нужен один экземпляр на всё приложение
+@Singleton
 class ChaptersRepository @Inject constructor() {
 
     fun getChaptersForBook(context: Context, bookId: Int): List<AudioItem> {
@@ -84,7 +84,7 @@ class ChaptersRepository @Inject constructor() {
             65 -> 13 // Евреям
             66 -> 22 // Откровение
 
-            else -> 1 // Защитная заглушка
+            else -> 1
         }
 
         // 2. УНИКАЛЬНЫЕ ПРЕФИКСЫ ДЛЯ НАЗВАНИЙ АУДИОФАЙЛОВ
@@ -162,7 +162,10 @@ class ChaptersRepository @Inject constructor() {
             else -> "genesis_"
         }
 
-        // 3. СБОРКА И ПРОВЕРКА РЕСУРСОВ RAW
+        // Получаем имя папки книги из префикса (просто отрезаем знак подчеркивания)
+        val folderName = filePrefix.removeSuffix("_")
+
+        // 3. СБОРКА И ПРОВЕРКА РЕСУРСОВ RAW И ПУТЕЙ ASSETS
         return (1..chaptersCount).map { chapterNumber ->
             val fileName = "$filePrefix$chapterNumber"
 
@@ -172,15 +175,31 @@ class ChaptersRepository @Inject constructor() {
                 context.packageName
             )
 
-            // Если конкретного файла в res/raw ещё нет, ставим Бытие 1 как заглушку от крашей
             val finalAudioId = if (resId != 0) resId else R.raw.genesis_1
+
+            // Автоматически собираем путь вида: "bible_data/genesis/1.txt"
+            val textPath = "bible_data/$folderName/$chapterNumber.txt"
 
             AudioItem(
                 id = (bookId * 1000) + chapterNumber,
                 name = "Глава $chapterNumber",
                 audioRawId = finalAudioId,
+                textPath = textPath,
                 isPlaying = false
             )
+        }
+    }
+
+    /**
+     * Вспомогательный метод для чтения текста главы прямо из сохраненного пути
+     * Пример использования в плеере: val text = chaptersRepository.loadChapterText(context, audioItem.textPath)
+     */
+    fun loadChapterText(context: Context, assetsPath: String): String {
+        return try {
+            context.assets.open(assetsPath).bufferedReader().use { it.readText() }
+        } catch (e: IOException) {
+            e.printStackTrace()
+            "Текст этой главы временно недоступен."
         }
     }
 }

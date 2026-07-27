@@ -111,6 +111,29 @@ class FragmentChapter() : Fragment(), AdapterChapters.OnAudioClickListener {
             }
         }
 
+        binding.imageViewArrow.setOnClickListener {
+            // 1. Проверяем, скрыт ли сейчас мини-плеер (или его развернутая часть).
+            // ОБЯЗАТЕЛЬНО замените 'layoutMiniPlayer' на реальный ID контейнера вашего плеера!
+            val isVisible = binding.layoutMiniPlayer.visibility == View.VISIBLE
+
+            if (isVisible) {
+                // Если плеер открыт — скрываем его и плавно крутим стрелочку в 0 градусов (например, смотрит вниз)
+                binding.layoutMiniPlayer.visibility = View.GONE
+                binding.imageViewArrow.animate()
+                    .rotation(0f)
+                    .setDuration(250) // Скорость анимации в миллисекундах
+                    .start()
+            } else {
+                // Если плеер скрыт — показываем его и плавно переворачиваем стрелочку на 180 градусов (смотрит вверх)
+                binding.layoutMiniPlayer.visibility = View.VISIBLE
+                binding.imageViewArrow.animate()
+                    .rotation(180f)
+                    .setDuration(250)
+                    .start()
+            }
+        }
+
+
         // Обработка перемотки через SeekBar
         binding.seekBarMiniPlayer.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {

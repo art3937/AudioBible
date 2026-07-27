@@ -14,7 +14,6 @@
     app:cardMaxElevation="6dp"
     app:cardBackgroundColor="@android:color/transparent">
 
-    <!-- Добавили android:background с нашим градиентом -->
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/layoutBackground"
         android:layout_width="match_parent"
@@ -22,23 +21,36 @@
         android:background="@drawable/modern_card_gradient"
         android:padding="20dp">
 
-        <!-- Текст — изменили цвет на белый для контраста -->
+        <!-- Название главы — теперь не упирается прямо в кнопку плеера -->
         <TextView
             android:id="@+id/textViewTitle"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginEnd="16dp"
+            android:layout_marginEnd="8dp"
             android:maxLines="1"
             android:textColor="#FFFFFF"
             android:textSize="18sp"
             android:textStyle="bold"
-            app:layout_constraintBottom_toBottomOf="parent"
-            app:layout_constraintEnd_toStartOf="@id/buttonPlayPause"
+            app:layout_constraintBottom_toBottomOf="@id/buttonPlayPause"
+            app:layout_constraintEnd_toStartOf="@id/imageViewArrow"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent"
             tools:text="Глава 1" />
 
-        <!-- Кнопка Play/Pause — добавили белый цвет для иконки плеера -->
+        <!-- НОВАЯ ГАЛОЧКА: Иконка стрелочки для раскрытия текста -->
+        <ImageView
+            android:id="@+id/imageViewArrow"
+            android:layout_width="24dp"
+            android:layout_height="24dp"
+            android:layout_marginEnd="16dp"
+            android:contentDescription="Развернуть текст"
+            android:src="@android:drawable/arrow_down_float"
+            app:layout_constraintBottom_toBottomOf="@id/buttonPlayPause"
+            app:layout_constraintEnd_toStartOf="@id/buttonPlayPause"
+            app:layout_constraintTop_toTopOf="parent"
+            app:tint="#FFFFFF" />
+
+        <!-- Кнопка Play/Pause -->
         <ImageButton
             android:id="@+id/buttonPlayPause"
             android:layout_width="44dp"
@@ -46,9 +58,24 @@
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="Воспроизведение"
             android:src="@android:drawable/ic_media_play"
-            app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
+
+        <!-- Скрытый текст главы (выпадает строго под textViewTitle) -->
+        <TextView
+            android:id="@+id/textViewChapterContent"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:textColor="#E2E8F0"
+            android:textSize="15sp"
+            android:visibility="gone"
+            app:layout_constraintBottom_toBottomOf="parent"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toBottomOf="@id/textViewTitle"
+            tools:text="1. В начале сотворил Бог небо и землю...\n2. Земля же была безвидна и пуста..."
+            tools:visibility="visible" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
 </androidx.cardview.widget.CardView>

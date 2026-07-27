@@ -67,4 +67,5 @@ dependencies {
 
     implementation("com.google.dagger:hilt-android:2.60.1")
     ksp("com.google.dagger:hilt-android-compiler:2.60.1")
+    testImplementation("org.json:json:20240303")
 }

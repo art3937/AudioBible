@@ -17,7 +17,10 @@ import androidx.navigation.ui.setupWithNavController
 import com.example.audiobible.R
 import com.example.audiobible.databinding.ActivityAppBinding
 import dagger.hilt.android.AndroidEntryPoint
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 import ru.netology.mediapleer2.TrackViewModel
+import java.io.File
 
 
 @AndroidEntryPoint
@@ -34,18 +37,21 @@ class AppActivity : AppCompatActivity() {
         val binding = ActivityAppBinding.inflate(layoutInflater)
         setContentView(binding.root)
         //______________________
-     //   generateBibleTxtFiles(this)// вот это прикол
+        //   generateBibleTxtFiles(this)// вот это прикол
         //___________________
         // 2. ВОТ ЭТА СТРОКА ОБЯЗАТЕЛЬНА: Назначаем наш Toolbar главным для Activity
         setSupportActionBar(binding.toolbar)
 
         // 3. Находим навигационный контроллер
-        val navController = (supportFragmentManager.findFragmentById(binding.navMain.id) as NavHostFragment).navController
+        val navController =
+            (supportFragmentManager.findFragmentById(binding.navMain.id) as NavHostFragment).navController
 
         // 4. Связываем Toolbar с навигацией (чтобы автоматически менялись заголовки)
         val appBarConfiguration = AppBarConfiguration(navController.graph)
         binding.toolbar.setupWithNavController(navController, appBarConfiguration)
 
+
+        //   generateBibleStructure()
         // 5. Запрашиваем разрешения
         requestNotificationsPermission()
 
@@ -53,31 +59,32 @@ class AppActivity : AppCompatActivity() {
             onBackPressedDispatcher.onBackPressed()
         }
         // 6. Настраиваем меню
-        addMenuProvider(
-            object : MenuProvider {
-                override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
-                    menuInflater.inflate(R.menu.auth_menu, menu)
-                }
+        addMenuProvider(object : MenuProvider {
+            override fun onCreateMenu(menu: Menu, menuInflater: MenuInflater) {
+                menuInflater.inflate(R.menu.auth_menu, menu)
+            }
 
-                override fun onMenuItemSelected(menuItem: MenuItem): Boolean {
-                    return when (menuItem.itemId) {
-                        R.id.signin -> {
-                            // navController.navigate(R.id.action_feedFragment_to_fragmentSignIn)
-                            true
-                        }
-                        R.id.signup -> {
-                            navController.navigate(R.id.action_feedFragment_to_fragmentChapter2)
-                            true
-                        }
-                        R.id.logout -> {
-                            // appAuth.removeAuth()
-                            true
-                        }
-                        else -> false
+            override fun onMenuItemSelected(menuItem: MenuItem): Boolean {
+                return when (menuItem.itemId) {
+                    R.id.signin -> {
+                        // navController.navigate(R.id.action_feedFragment_to_fragmentSignIn)
+                        true
                     }
+
+                    R.id.signup -> {
+                        navController.navigate(R.id.action_feedFragment_to_fragmentChapter2)
+                        true
+                    }
+
+                    R.id.logout -> {
+                        // appAuth.removeAuth()
+                        true
+                    }
+
+                    else -> false
                 }
             }
-        )
+        })
 
         if (savedInstanceState == null) {
             viewModel.restoreLastGlobalTrack()
@@ -94,47 +101,53 @@ class AppActivity : AppCompatActivity() {
     }
 
 
-
-
-
-//    fun generateBibleTxtFiles(context: Context) {
-//        // Словарь: префикс книги -> количество глав
+//    suspend fun generateBibleStructure() = withContext(Dispatchers.IO) {
+//        // Карта: имя книги -> точное количество глав/файлов
 //        val bibleBooks = mapOf(
-//            "genesis_" to 50, "exodus_" to 40, "leviticus_" to 27, "numbers_" to 36, "deuteronomy_" to 34,
-//            "joshua_" to 24, "judges_" to 21, "ruth_" to 4, "samuel1_" to 31, "samuel2_" to 24,
-//            "kings1_" to 22, "kings2_" to 25, "chronicles1_" to 29, "chronicles2_" to 36, "ezra_" to 10,
-//            "nehemiah_" to 13, "esther_" to 10, "job_" to 42, "psalms_" to 150, "proverbs_" to 31,
-//            "ecclesiastes_" to 12, "song_" to 8, "isaiah_" to 66, "jeremiah_" to 52, "lamentations_" to 5,
-//            "ezekiel_" to 48, "daniel_" to 12, "hosea_" to 14, "joel_" to 3, "amos_" to 9,
-//            "obadiah_" to 1, "jonah_" to 4, "micah_" to 7, "nahum_" to 3, "habakkuk_" to 3,
-//            "zephaniah_" to 3, "haggai_" to 2, "zechariah_" to 14, "malachi_" to 4, "matthew_" to 28,
-//            "mark_" to 16, "luke_" to 24, "john_" to 21, "acts_" to 28, "james_" to 5,
-//            "peter1_" to 5, "peter2_" to 3, "john1_" to 5, "john2_" to 1, "john3_" to 1,
-//            "jude_" to 1, "romans_" to 16, "corinthians1_" to 16, "corinthians2_" to 13, "galatians_" to 6,
-//            "ephesians_" to 6, "philippians_" to 4, "colossians_" to 4, "thessalonians1_" to 5, "thessalonians2_" to 3,
-//            "timothy1_" to 6, "timothy2_" to 4, "titus_" to 3, "philemon_" to 1, "hebrews_" to 13,
-//            "revelation_" to 22
+//            "genesis" to 50, "exodus" to 40, "leviticus" to 27, "numbers" to 36, "deuteronomy" to 34,
+//            "joshua" to 24, "judges" to 21, "ruth" to 4, "samuel1" to 31, "samuel2" to 24,
+//            "kings1" to 22, "kings2" to 25, "chronicles1" to 29, "chronicles2" to 36, "ezra" to 10,
+//            "nehemiah" to 13, "esther" to 10, "job" to 42, "psalms" to 150, "proverbs" to 31,
+//            "ecclesiastes" to 12, "song" to 8, "isaiah" to 66, "jeremiah" to 52, "lamentations" to 5,
+//            "ezekiel" to 48, "daniel" to 12, "hosea" to 14, "joel" to 3, "amos" to 9,
+//            "obadiah" to 1, "jonah" to 4, "micah" to 7, "nahum" to 3, "habakkuk" to 3,
+//            "zephaniah" to 3, "haggai" to 2, "zechariah" to 14, "malachi" to 4, "matthew" to 28,
+//            "mark" to 16, "luke" to 24, "john" to 21, "acts" to 28, "james" to 5,
+//            "peter1" to 5, "peter2" to 3, "john1" to 5, "john2" to 1, "john3" to 1,
+//            "jude" to 1, "romans" to 16, "corinthians1" to 16, "corinthians2" to 13, "galatians" to 6,
+//            "ephesians" to 6, "philippians" to 4, "colossians" to 4, "thessalonians1" to 5, "thessalonians2" to 3,
+//            "timothy1" to 6, "timothy2" to 4, "titus" to 3, "philemon" to 1, "hebrews" to 13,
+//            "revelation" to 22
 //        )
-
-//        // Создаем папку bible_txt в файлах приложения
-//        val outputDir = File(context.filesDir, "bible_txt")
-//        if (!outputDir.exists()) {
-//            outputDir.mkdirs()
+//
+//        // Главная папка во внутренних файлах приложения
+//        val baseDir = File(this@AppActivity.filesDir, "bible_data")
+//        if (!baseDir.exists()) {
+//            baseDir.mkdirs()
 //        }
 //
-//        // Запускаем генерацию файлов
-//        bibleBooks.forEach { (prefix, chaptersCount) ->
+//        bibleBooks.forEach { (bookName, chaptersCount) ->
+//            // 1. Создаем папку для конкретной книги (например: bible_data/genesis)
+//            val bookFolder = File(baseDir, bookName)
+//            if (!bookFolder.exists()) {
+//                bookFolder.mkdirs()
+//            }
+//
+//            // 2. Создаем файлы глав внутри этой папки (1.txt, 2.txt...)
 //            for (chapterNumber in 1..chaptersCount) {
-//                val fileName = "$prefix$chapterNumber.txt" // Можно заменить .txt на .mp3
-//                val file = File(outputDir, fileName)
+//                val fileName = "$chapterNumber.txt" // Если нужно для аудио, меняем на .mp3
+//                val file = File(bookFolder, fileName)
 //
 //                if (!file.exists()) {
-//                    file.createNewFile() // Создаем пустой файл
+//                    try {
+//                        file.createNewFile()
+//                    } catch (e: Exception) {
+//                        e.printStackTrace()
+//                    }
 //                }
 //            }
 //        }
-//
-//        // Выводим в лог путь к папке, чтобы вы знали, где забрать файлы
-//        println("Успешно создано 1189 файлов в папке: ${outputDir.absolutePath}")
-    }
+//    }
+
+}
 
