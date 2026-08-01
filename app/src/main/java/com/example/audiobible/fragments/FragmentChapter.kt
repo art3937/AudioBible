@@ -21,6 +21,7 @@ import com.example.audiobible.dto.AudioItem
 import dagger.hilt.android.AndroidEntryPoint
 import ru.netology.mediapleer2.TrackViewModel
 import androidx.activity.OnBackPressedCallback
+import androidx.core.view.isVisible
 
 @AndroidEntryPoint
 class FragmentChapter() : Fragment(), AdapterChapters.OnAudioClickListener {
@@ -31,6 +32,8 @@ class FragmentChapter() : Fragment(), AdapterChapters.OnAudioClickListener {
     private var isUserTrackingSeekBar = false
 
     private val viewModel: TrackViewModel by activityViewModels()
+
+    private var isMiniPlayerMinimized = false
 
 
     override fun onCreateView(
@@ -71,15 +74,20 @@ class FragmentChapter() : Fragment(), AdapterChapters.OnAudioClickListener {
             booksAdapter.submitList(tracks)
         }
 
+        binding.layoutMiniPlayer.post {
+            binding.layoutMiniPlayer.pivotX = binding.layoutMiniPlayer.width / 2f
+            binding.layoutMiniPlayer.pivotY = binding.layoutMiniPlayer.height.toFloat()
+        }
+
         // Подписка на состояние плеера и управление мини-плеером (перенесено из AppActivity)
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.playerState.collectLatest { state ->
-                    if (state.total > 0) {
-                            showMiniPlayer()
+                    if (state.total > 0 && state.isPlaying) {
+                       // showMiniPlayer()
+                        binding.layoutMiniPlayer.isVisible = true
                         binding.textMiniPlayerTitle.text = state.name
                         binding.seekBarMiniPlayer.max = state.total
-
                         if (!isUserTrackingSeekBar) {
                             binding.seekBarMiniPlayer.progress = state.current
                             binding.textCurrentTime.text = state.currentStr
@@ -87,7 +95,7 @@ class FragmentChapter() : Fragment(), AdapterChapters.OnAudioClickListener {
 
                         binding.textTotalTime.text = state.totalStr
                     } else {
-                            hideMiniPlayer()
+                        //hideMiniPlayer()
                     }
 
                     val iconRes = if (state.isPlaying) R.drawable.pause else R.drawable.play
@@ -108,37 +116,47 @@ class FragmentChapter() : Fragment(), AdapterChapters.OnAudioClickListener {
                 }
             } else {
                 viewModel.resumeTrack()
+                booksAdapter.notifyItemChanged(viewModel.getCurrentPosition())
             }
         }
 
-        binding.imageViewArrow.setOnClickListener {
+        binding.hide.setOnClickListener {
             // 1. Проверяем, скрыт ли сейчас мини-плеер (или его развернутая часть).
             // ОБЯЗАТЕЛЬНО замените 'layoutMiniPlayer' на реальный ID контейнера вашего плеера!
-            val isVisible = binding.layoutMiniPlayer.visibility == View.VISIBLE
+            // val isVisible = binding.layoutMiniPlayer.visibility == View.VISIBLE
 
-            if (isVisible) {
-                // Если плеер открыт — скрываем его и плавно крутим стрелочку в 0 градусов (например, смотрит вниз)
-                binding.layoutMiniPlayer.visibility = View.GONE
-                binding.imageViewArrow.animate()
-                    .rotation(0f)
-                    .setDuration(250) // Скорость анимации в миллисекундах
-                    .start()
+            if (!isMiniPlayerMinimized) {
+                binding.hide.animate().rotation(0f).setDuration(200).start()
+                binding.layoutMiniPlayer.post {
+                    binding.layoutMiniPlayer.pivotX = binding.layoutMiniPlayer.width / 2f
+                    binding.layoutMiniPlayer.pivotY = binding.layoutMiniPlayer.height.toFloat()
+                    binding.layoutMiniPlayer.animate()
+                        .scaleX(0.3f)
+                        .scaleY(0.3f)
+                        .setDuration(300)
+                        .start()
+                }
+                isMiniPlayerMinimized = true
             } else {
-                // Если плеер скрыт — показываем его и плавно переворачиваем стрелочку на 180 градусов (смотрит вверх)
-                binding.layoutMiniPlayer.visibility = View.VISIBLE
-                binding.imageViewArrow.animate()
-                    .rotation(180f)
-                    .setDuration(250)
+                binding.hide.animate().rotation(180f).setDuration(200).start()
+                binding.layoutMiniPlayer.animate()
+                    .scaleX(1.0f)
+                    .scaleY(1.0f)
+                    .setDuration(300)
                     .start()
+
+                isMiniPlayerMinimized = false
             }
         }
 
 
         // Обработка перемотки через SeekBar
-        binding.seekBarMiniPlayer.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
+        binding.seekBarMiniPlayer.setOnSeekBarChangeListener(object :
+            SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar?, progress: Int, fromUser: Boolean) {
                 if (fromUser) {
-                    binding.textCurrentTime.text = String.format("%02d:%02d", (progress / 1000) / 60, (progress / 1000) % 60)
+                    binding.textCurrentTime.text =
+                        String.format("%02d:%02d", (progress / 1000) / 60, (progress / 1000) % 60)
                 }
             }
 
@@ -179,10 +197,12 @@ class FragmentChapter() : Fragment(), AdapterChapters.OnAudioClickListener {
         // Переключение на следующий/предыдущий трек
         binding.buttonPrevTrack.setOnClickListener {
             viewModel.previousTrack()
+            booksAdapter.notifyDataSetChanged()
         }
 
         binding.buttonNextTrack.setOnClickListener {
             viewModel.nextTrack()
+            booksAdapter.notifyDataSetChanged()
         }
 
 
@@ -193,7 +213,7 @@ class FragmentChapter() : Fragment(), AdapterChapters.OnAudioClickListener {
                 override fun handleOnBackPressed() {
                     viewModel.pauseTrack()
                     // 2. Находим и скрываем карточку плеера в Activity
-                    hideMiniPlayer()
+                  //  hideMiniPlayer()
 
 
                     // 3. СРАЗУ выходим из фрагмента назад (без блокировки через return)
@@ -215,27 +235,25 @@ class FragmentChapter() : Fragment(), AdapterChapters.OnAudioClickListener {
 
 
     private fun showMiniPlayer() {
-        binding.layoutMiniPlayer.apply {
-            if (visibility != View.VISIBLE) {
-                // быстрый слайд вверх с появлением
-                visibility = View.VISIBLE
-                alpha = 0f
-                translationY = 50f
-                animate().alpha(1f).translationY(0f).setDuration(250).start()
-            }
-        }
+        binding.layoutMiniPlayer.isVisible = true
+        binding.hide.animate().rotation(180f).setDuration(200).start()
+        binding.layoutMiniPlayer.animate()
+            .scaleX(1.0f)
+            .scaleY(1.0f)
+            .setDuration(300)
+            .start()
+
+        isMiniPlayerMinimized = false
     }
 
     private fun hideMiniPlayer() {
-        binding.layoutMiniPlayer.apply {
-            if (visibility == View.VISIBLE) {
-                animate().alpha(0f).translationY(50f).setDuration(200).withEndAction {
-                    visibility = View.GONE
-                    alpha = 1f
-                    translationY = 0f
-                }.start()
-            }
-        }
+        binding.hide.animate().rotation(0f).setDuration(200).start()
+        binding.layoutMiniPlayer.animate()
+            .scaleX(0.3f)
+            .scaleY(0.3f)
+            .setDuration(300)
+            .start()
+        isMiniPlayerMinimized = true
     }
 
     override fun onDestroyView() {

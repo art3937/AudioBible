@@ -54,21 +54,18 @@ tools:context=".fragments.AppActivity">
         app:layout_constraintEnd_toEndOf="parent">
 
         <ImageView
-            android:id="@+id/imageViewArrow"
+            android:id="@+id/hide"
             android:layout_width="48dp"
             android:layout_height="48dp"
             android:layout_gravity="end"
-            android:alpha="0.25"
-            android:tint="@color/black"
             android:scaleType="centerCrop"
-            android:src="@android:drawable/arrow_down_float"
-            />
+            android:src="@drawable/outline_arrow_circle_down_24"
+            app:tint="@color/black" />
 
         <ImageView
-            android:id="@+id/imageViewArrow"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
-            android:maxHeight="200dp"
+            android:maxHeight="300dp"
             android:alpha="0.25"
             android:layout_gravity="center"
             android:adjustViewBounds="true"

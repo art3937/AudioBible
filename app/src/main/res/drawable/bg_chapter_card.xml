@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <!-- Когда книга/трек выбрана (isActivated = true) -->
+    <item android:state_activated="true">
+        <layer-list>
+            <!-- 1. Базовый градиент -->
+            <item android:drawable="@drawable/modern_card_gradient" />
+
+            <!-- 2. Эффект осветления фона (белый цвет с альфа-каналом 10%) -->
+            <item>
+                <shape android:shape="rectangle">
+                    <solid android:color="#1AFFFFFF" />
+                    <corners android:radius="12dp" />
+                </shape>
+            </item>
+
+            <!-- 3. Накладываем БЕЛУЮ обводку сверху -->
+            <item>
+                <shape android:shape="rectangle">
+                    <solid android:color="@android:color/transparent" />
+                    <stroke android:width="3dp" android:color="#FFFFFF" />
+                    <corners android:radius="12dp" />
+                </shape>
+            </item>
+        </layer-list>
+    </item>
+
+    <!-- Обычное состояние (Просто градиент, обернутый в layer-list) -->
+    <item>
+        <layer-list>
+            <item android:drawable="@drawable/modern_card_gradient" />
+        </layer-list>
+    </item>
+
+</selector>

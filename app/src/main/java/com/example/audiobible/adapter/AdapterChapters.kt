@@ -55,12 +55,15 @@ class AdapterChapters(
             val iconRes = if (item.isPlaying) R.drawable.pause else R.drawable.play
             binding.buttonPlayPause.setImageResource(iconRes)
 
-            // Фоновый цвет карточки
-            try {
-                binding.layoutBackground.setBackgroundColor("#2C5282".toColorInt())
-            } catch (e: Exception) {
-                binding.layoutBackground.setBackgroundColor(Color.DKGRAY)
+
+            if (item.isSelected) {
+                binding.textViewTitle.setTextColor(Color.YELLOW)
+            } else {
+                binding.textViewTitle.setTextColor(Color.WHITE)
             }
+            // ВКЛЮЧАЕМ СЕЛЕКТОР ОБВОДКИ КАРТОЧКИ
+            // Привязываем активацию фона к флагу модели. XML сам нарисует рамку!
+       binding.root.isActivated = item.isSelected
 
             // Клик по кнопке Play/Pause аудиозаписи
             playPauseButton.setOnClickListener {
@@ -94,8 +97,8 @@ class AdapterChapters(
                         val regex = """(?m)^\d+\.""".toRegex()
                         val matchResults = regex.findAll(rawText)
 
-                        // Задаем цвет для номеров стихов (сейчас стоит золотисто-оранжевый #FF9800)
-                        val numColor = "#FF9800".toColorInt()
+                        // Задаем цвет для номеров стихов (золотисто-оранжевый)
+                        val numColor = Color.parseColor("#FF9800")
 
                         // Пробегаемся по всем найденным цифрам и красим их
                         for (match in matchResults) {

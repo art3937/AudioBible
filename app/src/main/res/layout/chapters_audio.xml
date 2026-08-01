@@ -18,7 +18,7 @@
         android:id="@+id/layoutBackground"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:background="@drawable/modern_card_gradient"
+        android:background="@drawable/bg_chapter_card"
         android:padding="20dp">
 
         <!-- Название главы — теперь не упирается прямо в кнопку плеера -->

@@ -68,8 +68,7 @@ class AudioPlayerManager @Inject constructor(@ApplicationContext context: Contex
             private val _progressState = MutableStateFlow(PlayerProgressState())
             val progressState: StateFlow<PlayerProgressState> = _progressState.asStateFlow()
     private val handler = Handler(Looper.getMainLooper())
-    // ИСПРАВЛЕНИЕ: Вместо "object : Runnable" используем обычный метод,
-    // ссылку на который безопасно передавать в Handler
+
     private fun updateProgressRunnable() {
         val current = exoPlayer.currentPosition.toInt()
         val total = if (exoPlayer.duration == androidx.media3.common.C.TIME_UNSET) 0 else exoPlayer.duration.toInt()
@@ -81,10 +80,8 @@ class AudioPlayerManager @Inject constructor(@ApplicationContext context: Contex
             totalStr = formatTime(total),
             isPlaying = exoPlayer.isPlaying,
             isTrackCompleted = false,
-            // ======= ВОТ ОНО, ИСПРАВЛЕНИЕ! =======
-            // Говорим плееру: "Сохраняй то название, которое там уже лежало!"
-            name = _progressState.value.name
-            // ======================================
+
+
         )
         handler.postDelayed(::updateProgressRunnable, 500)
     }
@@ -109,7 +106,7 @@ class AudioPlayerManager @Inject constructor(@ApplicationContext context: Contex
     }
 
     //Для локальных файлов
-    fun startRawTrack(rawResourceId: Int,startPositionMs: Long = 0L,chapterName: String = "", bookName: String = "Библия") {
+    fun startRawTrack(rawResourceId: Int,startPositionMs: Long = 0L,chapterName: String = "") {
         // Безопасный сборщика URI через стандартный Android SDK:
         // Результат будет в формате: android.resource://имя_пакета_приложения/идентификатор_ресурса
         val uri = Uri.Builder()
@@ -118,15 +115,15 @@ class AudioPlayerManager @Inject constructor(@ApplicationContext context: Contex
             .build()
 
         val mediaId = uri.toString()
-        val fullTitle = "$bookName — $chapterName"
+       // val fullTitle = "$bookName — $chapterName"
         if (exoPlayer.currentMediaItem?.mediaId == mediaId) {
             if (startPositionMs > 0) {
                 exoPlayer.seekTo(startPositionMs)
             }
             exoPlayer.play()
-            _progressState.value = _progressState.value.copy(
-                name = fullTitle// Записываем собранную строку в текстовое поле состояния
-            )
+//            _progressState.value = _progressState.value.copy(
+//              //  name = fullTitle// Записываем собранную строку в текстовое поле состояния
+//            )
         } else {
             val mediaItem = MediaItem.Builder()
                 .setUri(uri)
@@ -136,9 +133,9 @@ class AudioPlayerManager @Inject constructor(@ApplicationContext context: Contex
             exoPlayer.prepare()
             exoPlayer.play()
         }
-        _progressState.value = _progressState.value.copy(
-            name = fullTitle// Записываем собранную строку в текстовое поле состояния
-        )
+//        _progressState.value = _progressState.value.copy(
+//           // name = fullTitle// Записываем собранную строку в текстовое поле состояния
+//        )
     }
 
     val isPlaying: Boolean
@@ -186,9 +183,9 @@ class AudioPlayerManager @Inject constructor(@ApplicationContext context: Contex
             _progressState.value = PlayerProgressState(
                 isPlaying = false,
                 totalStr = progressMs.toString(),
-                // если в вашем PlayerProgressState есть другие поля (например, currentTrack),
-                // передайте их сюда при необходимости
-                name = "Библия — Загрузка последнего трека..." // Укажите имя, чтобы плеер появился!
+//                // если в вашем PlayerProgressState есть другие поля (например, currentTrack),
+//                // передайте их сюда при необходимости
+//                name = "Библия — Загрузка последнего трека..." // Укажите имя, чтобы плеер появился!
             )
 
         } catch (e: Exception) {

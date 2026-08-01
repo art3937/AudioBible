@@ -65,7 +65,7 @@ class TrackViewModel @Inject constructor(
         val isPlayerPlaying = forcedIsPlaying ?: playerManager.isPlaying
 
         _chaptersData.value = chapters.map { chapter ->
-            if (chapter.id == currentPlayingChapterId) chapter.copy(isPlaying = isPlayerPlaying, ) else chapter
+            if (chapter.id == currentPlayingChapterId) chapter.copy(isPlaying = isPlayerPlaying) else chapter
         }
     }
 
@@ -73,26 +73,36 @@ class TrackViewModel @Inject constructor(
         val isPlayingCurrent = currentPlayingChapterId == chapter.id && playerManager.isPlaying
 
         if (isPlayingCurrent) {
-            saveCurrentPlaybackPosition(chapter)
+            // При паузе отправляем в базу состояние с сохраненным выделением
+            saveCurrentPlaybackPosition(chapter.copy(isSelected = true))
             playerManager.pause()
             currentPlayingChapterId = -1
             currentPlayingPosition = -1
 
+            // На паузе трек перестает играть (isPlaying = false), но выделение (isSelected) ОСТАЕТСЯ true
             _chaptersData.value = _chaptersData.value?.map {
-                if (it.id == chapter.id) it.copy(isPlaying = false) else it
+                if (it.id == chapter.id) it.copy(isPlaying = false, isSelected = true) else it
             }
         } else {
             currentPlayingChapterId = chapter.id
             currentPlayingPosition = position
 
             playerManager.startRawTrack(chapter.audioRawId, chapterName = chapter.name)
-            saveCurrentPlaybackPosition(chapter)
+            // При старте отправляем в базу новую главу с активным селектором
+            saveCurrentPlaybackPosition(chapter.copy(isSelected = true))
 
+            // Переключаем элементы в оперативной памяти:
+            // Текущему треку ставим и воспроизведение, и выделение в true. Всем остальным сбрасываем оба флага в false.
             _chaptersData.value = _chaptersData.value?.map {
-                if (it.id == chapter.id) it.copy(isPlaying = true) else it.copy(isPlaying = false)
+                if (it.id == chapter.id) {
+                    it.copy(isPlaying = true, isSelected = true)
+                } else {
+                    it.copy(isPlaying = false, isSelected = false)
+                }
             }
         }
     }
+
 
     fun saveCurrentPlaybackPosition(chapter: AudioItem) {
         // КРИТИЧЕСКИ ВАЖНО: Забираем позицию плеера на Главном потоке ДО ухода в корутину БД!
@@ -108,7 +118,10 @@ class TrackViewModel @Inject constructor(
                     lastAccessed = System.currentTimeMillis()
                 )
             )
-            Log.d("DB_INSPECTOR", "МЫ ПЕРЕЗАПИСАЛИ  ${currentBookId}  ЕДИНСТВЕННЫЙ ТРЕК В БАЗЕ: ${chapter.name}, Прогресс $exactProgressMs мс")
+            Log.d(
+                "DB_INSPECTOR",
+                "МЫ ПЕРЕЗАПИСАЛИ  ${currentBookId}  ЕДИНСТВЕННЫЙ ТРЕК В БАЗЕ: ${chapter.name}, Прогресс $exactProgressMs мс"
+            )
         }
     }
 
@@ -128,13 +141,13 @@ class TrackViewModel @Inject constructor(
                     lastAccessed = System.currentTimeMillis()
                 )
             )
-            Log.d("DB_INSPECTOR", "ГЛОБАЛЬНОЕ СОХРАНЕНИЕ ПРИ ВЫХОДЕ: ${chapter.name}, Прогресс $exactProgressMs мс")
+            Log.d(
+                "DB_INSPECTOR",
+                "ГЛОБАЛЬНОЕ СОХРАНЕНИЕ ПРИ ВЫХОДЕ: ${chapter.name}, Прогресс $exactProgressMs мс"
+            )
         }
     }
 
-    fun resumeTrack() {
-        playerManager.exoPlayer.play()
-    }
 
     fun restoreLastGlobalTrack() {
         viewModelScope.launch(Dispatchers.IO) {
@@ -144,7 +157,8 @@ class TrackViewModel @Inject constructor(
                 currentBookId = lastHistory.bookId
 
                 val chapters = repository.getChaptersForBook(context, lastHistory.bookId)
-                currentPlayingPosition = chapters.indexOfFirst { it.name == lastHistory.chapterNumber }
+                currentPlayingPosition =
+                    chapters.indexOfFirst { it.name == lastHistory.chapterNumber }
 
                 val targetTrack = chapters.getOrNull(currentPlayingPosition)
                 if (targetTrack != null) {
@@ -168,7 +182,6 @@ class TrackViewModel @Inject constructor(
             }
         }
     }
-
 
 
     fun rewind15Seconds() {
@@ -208,7 +221,7 @@ class TrackViewModel @Inject constructor(
         playerManager.startRawTrack(next.audioRawId, chapterName = next.name)
 
         _chaptersData.value = chapters.mapIndexed { i, c ->
-            if (i == nextIndex) c.copy(isPlaying = true) else c.copy(isPlaying = false)
+            c.copy(isPlaying = (i == nextIndex), isSelected = (i == nextIndex))
         }
     }
 
@@ -230,7 +243,7 @@ class TrackViewModel @Inject constructor(
             withContext(Dispatchers.Main) {
                 playerManager.startRawTrack(first.audioRawId, chapterName = first.name)
                 _chaptersData.value = newChapters.mapIndexed { i, c ->
-                    if (i == 0) c.copy(isPlaying = true) else c.copy(isPlaying = false)
+                    if (i == 0) c.copy(isPlaying = true, isSelected = true) else c.copy(isPlaying = false, isSelected = false)
                 }
             }
         }
@@ -256,13 +269,25 @@ class TrackViewModel @Inject constructor(
         }
     }
 
-    fun seekTo(positionMs: Int) { playerManager.seekTo(positionMs) }
+    fun seekTo(positionMs: Int) {
+        playerManager.seekTo(positionMs)
+    }
+
+    fun resumeTrack() {
+        _chaptersData.value = _chaptersData.value?.map {
+            if (it.id == currentPlayingChapterId) it.copy(isPlaying = true) else it
+        }
+        playerManager.exoPlayer.play()
+
+    }
 
     fun pauseTrack() {
         _chaptersData.value = _chaptersData.value?.map {
-            if (it.isPlaying) it.copy(isPlaying = false) else it
+            if (it.id == currentPlayingChapterId) it.copy(isPlaying = false) else it
         }
         playerManager.pause()
 
     }
+
+
 }

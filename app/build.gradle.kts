@@ -63,9 +63,14 @@ dependencies {
     implementation("androidx.room:room-runtime:$roomVersion")
     implementation("androidx.room:room-ktx:$roomVersion")
     ksp("androidx.room:room-compiler:$roomVersion")
+    testImplementation("com.codeborne:selenide:7.2.3")
+    testImplementation("io.rest-assured:rest-assured:5.4.0")
 
-
+    testImplementation("com.squareup.okhttp3:okhttp:4.12.0")
     implementation("com.google.dagger:hilt-android:2.60.1")
     ksp("com.google.dagger:hilt-android-compiler:2.60.1")
     testImplementation("org.json:json:20240303")
+    // Движок Ktor для пробития TLS-защиты Cloudflare в тестах
+    testImplementation("io.ktor:ktor-client-core:2.3.12")
+    testImplementation("io.ktor:ktor-client-apache5:2.3.12")
 }

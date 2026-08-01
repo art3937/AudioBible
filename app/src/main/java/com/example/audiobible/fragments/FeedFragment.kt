@@ -70,6 +70,7 @@ class FeedFragment : Fragment() {
 //                    chapterId = clickedBook.id
                    Bundle().apply {
                         putInt("ARG_BOOK_ID", clickedBook.id) // Передаем именно Int!
+                       putString("ARG_BOOK_NAME", clickedBook.name)
                     }
                 )
         }
