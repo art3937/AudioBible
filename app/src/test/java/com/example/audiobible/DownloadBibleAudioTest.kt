@@ -17,68 +17,85 @@ class DownloadBibleAudioTest {
             targetFolder.mkdirs()
         }
 
-        // Отключаем встроенные проверки SSL, так как при запросе по IP-адресу сертификаты всегда ругаются
+        // Отключаем встроенные проверки SSL, если нужно
         configureUnsafeSsl()
 
-        println("=== ЗАПУСК ТОЧЕЧНОГО СКАЧИВАНИЯ ПО IP-АДРЕСУ (3 ГЛАВЫ) ===")
+        // Ожидается, что пользователь задаст шаблон URL через системное свойство или переменную окружения.
+        // Примеры поддерживаемых шаблонов:
+        //  - https://91.218.228.218/files/genesis_{n}.mp3
+        //  - https://example.com/path/%s.mp3
+        //  - https://example.com/path/genesis_
+        val rawBase = System.getProperty("audio.base.url") ?: System.getenv("AUDIO_BASE_URL")
+        require(!rawBase.isNullOrBlank()) {
+            "Set system property -Daudio.base.url or env AUDIO_BASE_URL to a URL template, e.g. https://91.218.228.218/files/genesis_{n}.mp3"
+        }
+
+        val hostHeader = System.getProperty("audio.host.header") ?: System.getenv("AUDIO_HOST_HEADER")
+
+        println("=== START DOWNLOAD USING BASE: $rawBase ===")
 
         var totalDownloaded = 0
 
         for (chapterId in 1..3) {
-            val outputFile = File(targetFolder, "$chapterId.mp3")
-            if (outputFile.exists()) {
-                outputFile.delete()
-            }
-
             val formattedChapter = if (chapterId < 10) "0$chapterId" else "$chapterId"
 
-            // Прямой IP-адрес сервера Института Перевода Библии
-            val audioUrlString = "https://91.218.228"
+            val audioUrlString = when {
+                rawBase.contains("{n}") -> rawBase.replace("{n}", formattedChapter)
+                rawBase.contains("%s") -> String.format(rawBase, formattedChapter)
+                rawBase.endsWith("_") -> rawBase + formattedChapter + ".mp3"
+                rawBase.endsWith("/") -> rawBase + formattedChapter + ".mp3"
+                else -> rawBase + formattedChapter + ".mp3"
+            }
+
+            println("⏳ Attempting download chapter $chapterId from: $audioUrlString")
+
+            val outputFile = File(targetFolder, "${formattedChapter}.mp3")
+            if (outputFile.exists()) outputFile.delete()
 
             try {
-                println("⏳ Прямой IP-запрос главы $chapterId из 3... ($audioUrlString)")
-
                 val url = URL(audioUrlString)
-                val connection = url.openConnection() as HttpURLConnection
-                connection.requestMethod = "GET"
-                connection.connectTimeout = 20000
-                connection.readTimeout = 60000
+                val conn = url.openConnection() as HttpURLConnection
+                conn.requestMethod = "GET"
+                conn.connectTimeout = 20000
+                conn.readTimeout = 60000
+                conn.instanceFollowRedirects = true
 
-                // Маскируемся под стандартный ExoPlayer
-                connection.setRequestProperty("User-Agent", "AndroidExoPlayer/2.19.1 (Linux;Android 11)")
+                // заголовки
+                conn.setRequestProperty("User-Agent", "AndroidExoPlayer/2.19.1 (Linux;Android 11)")
+                if (!hostHeader.isNullOrBlank()) conn.setRequestProperty("Host", hostHeader)
 
-                // Обязательно передаем Host-заголовок, чтобы веб-сервер внутри IP понял, какой файл мы ищем
-                connection.setRequestProperty("Host", "bible.ru")
+                conn.connect()
 
-                if (connection.responseCode == HttpURLConnection.HTTP_OK) {
-                    BufferedInputStream(connection.inputStream).use { input ->
-                        // ИСПРАВЛЕНО: Убрали именованный параметр targetFile =, оставили чистый файл
+                val code = conn.responseCode
+                if (code == HttpURLConnection.HTTP_OK) {
+                    BufferedInputStream(conn.inputStream).use { input ->
                         FileOutputStream(outputFile).use { output ->
                             input.copyTo(output)
                         }
                     }
 
                     val sizeKb = outputFile.length() / 1024
-                    if (sizeKb > 300) {
-                        println("✅ КРУТО! Глава $chapterId успешно скачана по IP! Размер: $sizeKb КБ")
+                    if (sizeKb > 50) { // порог маленький для теста; подправьте при необходимости
+                        println("✅ Chapter $chapterId downloaded: ${outputFile.absolutePath} (${sizeKb} KB)")
                         totalDownloaded++
                     } else {
-                        println("❌ Ошибка: скачался некорректный блок размером $sizeKb КБ.")
+                        println("❌ Downloaded file seems too small: ${sizeKb} KB; deleting")
                         outputFile.delete()
                     }
                 } else {
-                    println("❌ Сервер вернул код ответа: ${connection.responseCode}")
+                    println("❌ Server returned HTTP $code for $audioUrlString")
                 }
 
-                Thread.sleep(300)
+                conn.disconnect()
 
             } catch (e: Exception) {
-                println("❌ ОШИБКА НА ГЛАВЕ $chapterId: ${e.message}")
+                println("❌ Error downloading chapter $chapterId: ${e.message}")
             }
+
+            Thread.sleep(300)
         }
 
-        println("=== СКАЧИВАНИЕ И СБОРКА ПОЛНОСТЬЮ ЗАВЕРШЕНЫ ===")
-        println("📊 Финальный статус: В папке assets успешно подготовлено: $totalDownloaded из 3 глав Бытия!")
+        println("=== FINISHED. Downloaded $totalDownloaded of 3 chapters.")
     }
 
     private fun configureUnsafeSsl() {

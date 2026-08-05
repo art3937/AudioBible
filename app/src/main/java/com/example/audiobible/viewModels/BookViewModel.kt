@@ -85,8 +85,6 @@ class BookViewModel @Inject constructor(
         viewModelScope.launch {
             val selectedBook = currentList.find { it.id == newBookId } ?: return@launch
 
-            android.util.Log.d("BookViewModel", "selectBook: newBookId=$newBookId, name=${selectedBook.name}")
-
             // Создаем новый BookState с цветом из Book
             val newBookState = BookState(
                 bookId = newBookId,
@@ -94,7 +92,6 @@ class BookViewModel @Inject constructor(
                 backgroundColor = selectedBook.backgroundColor,
                 selectedChapter = 1
             )
-            android.util.Log.d("BookViewModel", "Saving BookState: $newBookState")
             repo.save(newBookState)
         }
     }

@@ -1,5 +1,7 @@
 package com.example.audiobible.fragments
 
+import android.app.NotificationChannel
+import android.app.NotificationManager
 import android.os.Bundle
 import android.view.LayoutInflater
 import android.view.View
@@ -20,8 +22,15 @@ import com.example.audiobible.databinding.FragmentNewChapterBinding
 import com.example.audiobible.dto.AudioItem
 import dagger.hilt.android.AndroidEntryPoint
 import ru.netology.mediapleer2.TrackViewModel
+import android.app.PendingIntent
+import android.content.Intent
+import android.content.Context
+import android.os.Build
 import androidx.activity.OnBackPressedCallback
+import androidx.compose.remote.creation.compose.action.Action
+import androidx.core.app.NotificationCompat
 import androidx.core.view.isVisible
+import com.example.audiobible.plaerManager.PlayerProgressState
 
 @AndroidEntryPoint
 class FragmentChapter() : Fragment(), AdapterChapters.OnAudioClickListener {
@@ -48,8 +57,6 @@ class FragmentChapter() : Fragment(), AdapterChapters.OnAudioClickListener {
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
 
-        // 1. РАСКОММЕНТИРОВАНО И ИСПРАВЛЕНО: Создаем адаптер
-        // Передаем 'this' как OnAudioClickListener, а во втором лямбда-выражении обрабатываем клик по самой главе
         booksAdapter = AdapterChapters(
             listener = this,
             onChapterClick = { item ->
@@ -71,7 +78,13 @@ class FragmentChapter() : Fragment(), AdapterChapters.OnAudioClickListener {
 
         // 3. Создаем красивый тестовый список книг
         viewModel.chaptersData.observe(viewLifecycleOwner) { tracks ->
-            booksAdapter.submitList(tracks)
+            booksAdapter.submitList(tracks) {
+                val selIndex = tracks.indexOfFirst { it.isSelected }
+                if (selIndex >= 0) {
+                    // notify single item in case DiffUtil somehow missed updating visual state
+                    booksAdapter.notifyItemChanged(selIndex)
+                }
+            }
         }
 
         binding.layoutMiniPlayer.post {
@@ -83,7 +96,7 @@ class FragmentChapter() : Fragment(), AdapterChapters.OnAudioClickListener {
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.playerState.collectLatest { state ->
-                    if (state.total > 0 && state.isPlaying) {
+                    if (state.total > 0 /*&& state.isPlaying*/) {
                        // showMiniPlayer()
                         binding.layoutMiniPlayer.isVisible = true
                         binding.textMiniPlayerTitle.text = state.name
@@ -100,6 +113,9 @@ class FragmentChapter() : Fragment(), AdapterChapters.OnAudioClickListener {
 
                     val iconRes = if (state.isPlaying) R.drawable.pause else R.drawable.play
                     binding.buttonMiniPlayerPlayPause.setImageResource(iconRes)
+
+                    // Обновляем нотификацию из Fragment через ViewModel состояние
+                  //  updateMediaNotification(state)
                 }
             }
         }
@@ -197,13 +213,13 @@ class FragmentChapter() : Fragment(), AdapterChapters.OnAudioClickListener {
         // Переключение на следующий/предыдущий трек
         binding.buttonPrevTrack.setOnClickListener {
             viewModel.previousTrack()
-            booksAdapter.notifyDataSetChanged()
         }
 
         binding.buttonNextTrack.setOnClickListener {
             viewModel.nextTrack()
-            booksAdapter.notifyDataSetChanged()
+
         }
+
 
 
         // МЕХАНИЗМ ПЕРЕОПРЕДЕЛЕНИЯ КНОПКИ НАЗАД + ПАУЗА И ВЫХОД
@@ -233,7 +249,7 @@ class FragmentChapter() : Fragment(), AdapterChapters.OnAudioClickListener {
         viewModel.toggleChapter(item, position)
     }
 
-
+//пока не нужно но может потом пригодится
     private fun showMiniPlayer() {
         binding.layoutMiniPlayer.isVisible = true
         binding.hide.animate().rotation(180f).setDuration(200).start()
@@ -246,6 +262,7 @@ class FragmentChapter() : Fragment(), AdapterChapters.OnAudioClickListener {
         isMiniPlayerMinimized = false
     }
 
+    //пока не нужно но может потом пригодится
     private fun hideMiniPlayer() {
         binding.hide.animate().rotation(0f).setDuration(200).start()
         binding.layoutMiniPlayer.animate()
@@ -256,10 +273,7 @@ class FragmentChapter() : Fragment(), AdapterChapters.OnAudioClickListener {
         isMiniPlayerMinimized = true
     }
 
-    override fun onDestroyView() {
-        super.onDestroyView()
-        _binding = null // Освобождаем binding, чтобы не было утечек памяти
-    }
+
 
 
 }

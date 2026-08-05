@@ -1,0 +1,4 @@
+<resources>
+    <!-- Media3 автоматически подставит эту иконку в уведомление -->
+    <drawable name="media3_notification_small_icon">@drawable/ic_launcher_foreground</drawable>
+</resources>

@@ -13,20 +13,31 @@ import com.example.audiobible.dto.AudioItem
 import com.example.audiobible.plaerManager.AudioPlayerManager
 import com.example.audiobible.repository.ChaptersRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
+import androidx.media3.session.SessionToken
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import androidx.media3.session.MediaSession
 import javax.inject.Inject
 
 @HiltViewModel
+// TrackViewModel: bridge between UI (FragmentChapter) and playback logic
+// Responsibilities:
+// - Expose chaptersData and playerState for UI binding
+// - Start/pause/seek tracks via AudioPlayerManager when user interacts with UI
+// - Delegate next/previous track decision to PlaybackController (which handles DB + player start safely)
+// - Update in-memory chaptersData so UI shows which item is selected / playing
+// Important thread rules:
+// - Calls that touch ExoPlayer must be on Main thread (AudioPlayerManager ensures this where needed)
+// - DB operations are dispatched to IO (viewModelScope.launch(Dispatchers.IO))
 class TrackViewModel @Inject constructor(
     private val playerManager: AudioPlayerManager,
     private val savedStateHandle: SavedStateHandle,
     private val repository: ChaptersRepository,
-    private val bibleDao: BibleDao, // ИНЖЕКТИРУЕМ DAO ЧЕРЕЗ HILT (Убрали AppDatabase.getDatabase)
+    private val bibleDao: BibleDao, // ИНЖЕКТИРУЕМ DAO ЧЕРЕЗ HILT (ViewModel управляет БД)
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -41,8 +52,12 @@ class TrackViewModel @Inject constructor(
 
     val playerState = playerManager.progressState
 
+
+
     init {
-//        restoreLastGlobalTrack()
+        // Попытка восстановить последний глобальный трек при старте ViewModel
+        restoreLastGlobalTrack()
+
         // Автопереключение на следующий трек при окончании текущего
         viewModelScope.launch {
             var lastIsCompleted = false
@@ -64,8 +79,25 @@ class TrackViewModel @Inject constructor(
         val chapters = repository.getChaptersForBook(context, bookId)
         val isPlayerPlaying = forcedIsPlaying ?: playerManager.isPlaying
 
+        // Сначала выставляем базовый список (без выделения)
         _chaptersData.value = chapters.map { chapter ->
-            if (chapter.id == currentPlayingChapterId) chapter.copy(isPlaying = isPlayerPlaying) else chapter
+            if (chapter.id == currentPlayingChapterId) chapter.copy(isPlaying = isPlayerPlaying) else chapter.copy(isSelected = false)
+        }
+
+        // Проверяем в БД есть ли последняя сохранённая запись и помечаем её, если она относится к текущей книге
+        viewModelScope.launch(Dispatchers.IO) {
+            val last = bibleDao.getLastPlayedAudio()
+            if (last != null && last.bookId == bookId) {
+                val index = chapters.indexOfFirst { it.name == last.chapterNumber }
+                if (index >= 0) {
+                    // Обновляем на главном потоке
+                    withContext(Dispatchers.Main) {
+                        _chaptersData.value = chapters.mapIndexed { i, c ->
+                            c.copy(isSelected = (i == index), isPlaying = (i == index && isPlayerPlaying))
+                        }
+                    }
+                }
+            }
         }
     }
 
@@ -108,20 +140,18 @@ class TrackViewModel @Inject constructor(
         // КРИТИЧЕСКИ ВАЖНО: Забираем позицию плеера на Главном потоке ДО ухода в корутину БД!
         val exactProgressMs = playerManager.exoPlayer.currentPosition
 
+        val history = PlaybackHistory(
+            id = 0, // ГАРАНТИРУЕТ ТОЛЬКО ОДНУ СТРОКУ В ТАБЛИЦЕ ДЛЯ ВСЕГО ПРИЛОЖЕНИЯ
+            bookId = currentBookId,
+            chapterNumber = chapter.name,
+            playbackPositionMs = exactProgressMs,
+            lastAccessed = System.currentTimeMillis(),
+            isSelected = chapter.isSelected
+        )
+
+        // saving playback history (no logs)
         viewModelScope.launch(Dispatchers.IO) {
-            bibleDao.savePlaybackPosition(
-                PlaybackHistory(
-                    id = 0, // ГАРАНТИРУЕТ ТОЛЬКО ОДНУ СТРОКУ В ТАБЛИЦЕ ДЛЯ ВСЕГО ПРИЛОЖЕНИЯ
-                    bookId = currentBookId,
-                    chapterNumber = chapter.name,
-                    playbackPositionMs = exactProgressMs,
-                    lastAccessed = System.currentTimeMillis()
-                )
-            )
-            Log.d(
-                "DB_INSPECTOR",
-                "МЫ ПЕРЕЗАПИСАЛИ  ${currentBookId}  ЕДИНСТВЕННЫЙ ТРЕК В БАЗЕ: ${chapter.name}, Прогресс $exactProgressMs мс"
-            )
+            bibleDao.savePlaybackPosition(history)
         }
     }
 
@@ -131,20 +161,18 @@ class TrackViewModel @Inject constructor(
         // Забираем позицию плеера на Главном потоке синхронно
         val exactProgressMs = playerManager.exoPlayer.currentPosition
 
+        val history = PlaybackHistory(
+            id = 0, // ВСЕГДА 0 — старый глобальный трек сотрется, запишется этот
+            bookId = currentBookId,
+            chapterNumber = chapter.name,
+            playbackPositionMs = exactProgressMs,
+            lastAccessed = System.currentTimeMillis(),
+            isSelected = chapter.isSelected
+        )
+
+        // global save without logs
         applicationScope.launch {
-            bibleDao.savePlaybackPosition(
-                PlaybackHistory(
-                    id = 0, // ВСЕГДА 0 — старый глобальный трек сотрется, запишется этот
-                    bookId = currentBookId,
-                    chapterNumber = chapter.name,
-                    playbackPositionMs = exactProgressMs,
-                    lastAccessed = System.currentTimeMillis()
-                )
-            )
-            Log.d(
-                "DB_INSPECTOR",
-                "ГЛОБАЛЬНОЕ СОХРАНЕНИЕ ПРИ ВЫХОДЕ: ${chapter.name}, Прогресс $exactProgressMs мс"
-            )
+            bibleDao.savePlaybackPosition(history)
         }
     }
 
@@ -164,19 +192,16 @@ class TrackViewModel @Inject constructor(
                 if (targetTrack != null) {
                     currentPlayingChapterId = targetTrack.id
                     withContext(Dispatchers.Main) {
-                        // Просто готовим трек в памяти плеера
+                        // Prepare track without playing
                         playerManager.prepareTrackWithoutPlaying(
                             targetTrack.audioRawId,
                             lastHistory.playbackPositionMs.toInt()
                         )
 
-
-//                        playerManager.startRawTrack(chapter.audioRawId, chapterName = chapter.name)
-//                        saveCurrentPlaybackPosition(chapter)
-//
-//                        _chaptersData.value = _chaptersData.value?.map {
-//                            if (it.id == chapter.id) it.copy(isPlaying = true) else it.copy(isPlaying = false)
-//                        } /// доделать идею
+                        // Update chapters list based on freshly loaded 'chapters'
+                        _chaptersData.value = chapters.mapIndexed { i, c ->
+                            c.copy(isSelected = (i == currentPlayingPosition) && lastHistory.isSelected, isPlaying = false)
+                        }
                     }
                 }
             }
@@ -201,27 +226,64 @@ class TrackViewModel @Inject constructor(
     }
 
     fun nextTrack() {
-        val chapters = _chaptersData.value ?: return
-        val nextIndex = currentPlayingPosition + 1
-        if (nextIndex >= chapters.size) {
-            // если конца книги достигли — пробуем перейти к следующей книге
-            advanceToNextBook()
-            return
-        }
+        // ViewModel теперь сама решает, какая следующая глава — мы работаем с БД и репозиторием здесь.
+        viewModelScope.launch(Dispatchers.IO) {
+            val last = bibleDao.getLastPlayedAudio()
+            if (last == null) {
+                // Если записи нет, начинаем с первой книги, первой главы
+                val chapters = repository.getChaptersForBook(context, 1)
+                if (chapters.isNotEmpty()) {
+                    val first = chapters[0]
+                    currentBookId = 1
+                    currentPlayingPosition = 0
+                    currentPlayingChapterId = first.id
 
-        // сохраняем позицию текущего трека
-        val currentChapter = chapters.getOrNull(currentPlayingPosition)
-        if (currentChapter != null) {
-            saveCurrentPlaybackPosition(currentChapter)
-        }
+                    // старт на главном потоке
+                    withContext(Dispatchers.Main) {
+                        playerManager.startRawTrack(first.audioRawId, chapterName = first.name)
+                        _chaptersData.postValue(chapters.mapIndexed { i, c -> if (i == 0) c.copy(isPlaying = true, isSelected = true) else c.copy(isPlaying = false, isSelected = false) })
+                    }
 
-        val next = chapters[nextIndex]
-        currentPlayingChapterId = next.id
-        currentPlayingPosition = nextIndex
-        playerManager.startRawTrack(next.audioRawId, chapterName = next.name)
+                    bibleDao.savePlaybackPosition(com.example.audiobible.bd.PlaybackHistory(0, 1, first.name, 0L, System.currentTimeMillis(), true))
+                }
+                return@launch
+            }
 
-        _chaptersData.value = chapters.mapIndexed { i, c ->
-            c.copy(isPlaying = (i == nextIndex), isSelected = (i == nextIndex))
+            val bookId = last.bookId
+            val chapters = repository.getChaptersForBook(context, bookId)
+            val currentIndex = chapters.indexOfFirst { it.name == last.chapterNumber }
+            val nextIndex = currentIndex + 1
+            if (nextIndex >= chapters.size) {
+                // Переходим на следующую книгу
+                val candidate = if (bookId <= 0) 1 else bookId + 1
+                if (candidate > 66) return@launch
+                val newChapters = repository.getChaptersForBook(context, candidate)
+                if (newChapters.isEmpty()) return@launch
+                val first = newChapters[0]
+                currentBookId = candidate
+                currentPlayingPosition = 0
+                currentPlayingChapterId = first.id
+
+                withContext(Dispatchers.Main) {
+                    playerManager.startRawTrack(first.audioRawId, chapterName = first.name)
+                    _chaptersData.postValue(newChapters.mapIndexed { i, c -> if (i == 0) c.copy(isPlaying = true, isSelected = true) else c.copy(isPlaying = false, isSelected = false) })
+                }
+
+                bibleDao.savePlaybackPosition(com.example.audiobible.bd.PlaybackHistory(0, candidate, first.name, 0L, System.currentTimeMillis(), true))
+                return@launch
+            }
+
+            val next = chapters[nextIndex]
+            currentBookId = bookId
+            currentPlayingPosition = nextIndex
+            currentPlayingChapterId = next.id
+
+            withContext(Dispatchers.Main) {
+                playerManager.startRawTrack(next.audioRawId, chapterName = next.name)
+                _chaptersData.postValue(chapters.mapIndexed { i, c -> if (i == nextIndex) c.copy(isPlaying = true, isSelected = true) else c.copy(isPlaying = false, isSelected = false) })
+            }
+
+            bibleDao.savePlaybackPosition(com.example.audiobible.bd.PlaybackHistory(0, bookId, next.name, 0L, System.currentTimeMillis(), true))
         }
     }
 
@@ -242,30 +304,28 @@ class TrackViewModel @Inject constructor(
 
             withContext(Dispatchers.Main) {
                 playerManager.startRawTrack(first.audioRawId, chapterName = first.name)
-                _chaptersData.value = newChapters.mapIndexed { i, c ->
-                    if (i == 0) c.copy(isPlaying = true, isSelected = true) else c.copy(isPlaying = false, isSelected = false)
-                }
+                _chaptersData.postValue(newChapters.mapIndexed { i, c -> if (i == 0) c.copy(isPlaying = true, isSelected = true) else c.copy(isPlaying = false, isSelected = false) })
             }
         }
     }
 
     fun previousTrack() {
-        val chapters = _chaptersData.value ?: return
-        val prevIndex = currentPlayingPosition - 1
-        if (prevIndex < 0) return // нет предыдущего
-
-        val currentChapter = chapters.getOrNull(currentPlayingPosition)
-        if (currentChapter != null) {
-            saveCurrentPlaybackPosition(currentChapter)
-        }
-
-        val prev = chapters[prevIndex]
-        currentPlayingChapterId = prev.id
-        currentPlayingPosition = prevIndex
-        playerManager.startRawTrack(prev.audioRawId, chapterName = prev.name)
-
-        _chaptersData.value = chapters.mapIndexed { i, c ->
-            if (i == prevIndex) c.copy(isPlaying = true) else c.copy(isPlaying = false)
+        viewModelScope.launch(Dispatchers.IO) {
+            val last = bibleDao.getLastPlayedAudio() ?: return@launch
+            val bookId = last.bookId
+            val chapters = repository.getChaptersForBook(context, bookId)
+            val currentIndex = chapters.indexOfFirst { it.name == last.chapterNumber }
+            val prevIndex = currentIndex - 1
+            if (prevIndex < 0) return@launch
+            val prev = chapters[prevIndex]
+            currentBookId = bookId
+            currentPlayingPosition = prevIndex
+            currentPlayingChapterId = prev.id
+            withContext(Dispatchers.Main) {
+                playerManager.startRawTrack(prev.audioRawId, chapterName = prev.name)
+                _chaptersData.postValue(chapters.mapIndexed { i, c -> if (i == prevIndex) c.copy(isPlaying = true, isSelected = true) else c.copy(isPlaying = false, isSelected = false) })
+            }
+            bibleDao.savePlaybackPosition(com.example.audiobible.bd.PlaybackHistory(0, bookId, prev.name, 0L, System.currentTimeMillis(), true))
         }
     }
 

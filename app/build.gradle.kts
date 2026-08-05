@@ -20,7 +20,7 @@ android {
 
     defaultConfig {
         applicationId = "com.example.audiobible"
-        minSdk = 24
+        minSdk = 29
         targetSdk = 36
         versionCode = 1
         versionName = "1.0"
@@ -50,6 +50,8 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation("androidx.fragment:fragment-ktx:1.8.9")
     implementation(libs.androidx.media3.exoplayer)
+    implementation(libs.androidx.remote.creation.compose)
+    implementation(libs.androidx.runtime)
     implementation(libs.material)
     testImplementation(libs.junit)
     androidTestImplementation(libs.androidx.espresso.core)
@@ -73,4 +75,9 @@ dependencies {
     // Движок Ktor для пробития TLS-защиты Cloudflare в тестах
     testImplementation("io.ktor:ktor-client-core:2.3.12")
     testImplementation("io.ktor:ktor-client-apache5:2.3.12")
+
+    val media3Version = "1.10.1" // Используйте актуальную версию
+
+    implementation("androidx.media3:media3-session:1.10.1")
+    // media compat для NotificationCompat.MediaStyle и MediaSessionCompat.Token
 }

@@ -9,5 +9,6 @@ data class PlaybackHistory(
     val bookId: Int,
     val chapterNumber: String,
     val playbackPositionMs: Long, // Позиция в миллисекундах (где остановился плеер)
-    val lastAccessed: Long = System.currentTimeMillis()
+    val lastAccessed: Long = System.currentTimeMillis(),
+    val isSelected: Boolean = false // Пометка выделения главы
 )

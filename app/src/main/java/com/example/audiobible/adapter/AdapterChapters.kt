@@ -17,15 +17,12 @@ import com.example.audiobible.dto.AudioItem
 import java.io.IOException
 
 class AdapterChapters(
-    private val listener: OnAudioClickListener,
-    private val onChapterClick: (AudioItem) -> Unit
+    private val listener: OnAudioClickListener, private val onChapterClick: (AudioItem) -> Unit
 ) : ListAdapter<AudioItem, AdapterChapters.ChapterViewHolder>(ChapterDiffCallback()) {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ChapterViewHolder {
         val binding = ChaptersAudioBinding.inflate(
-            LayoutInflater.from(parent.context),
-            parent,
-            false
+            LayoutInflater.from(parent.context), parent, false
         )
         return ChapterViewHolder(binding)
     }
@@ -45,9 +42,7 @@ class AdapterChapters(
         val playPauseButton: ImageButton = binding.buttonPlayPause
 
         fun bind(
-            item: AudioItem,
-            listener: OnAudioClickListener,
-            onChapterClick: (AudioItem) -> Unit
+            item: AudioItem, listener: OnAudioClickListener, onChapterClick: (AudioItem) -> Unit
         ) {
             binding.textViewTitle.text = item.name
 
@@ -63,8 +58,7 @@ class AdapterChapters(
             }
             // ВКЛЮЧАЕМ СЕЛЕКТОР ОБВОДКИ КАРТОЧКИ
             // Привязываем активацию фона к флагу модели. XML сам нарисует рамку!
-       binding.root.isActivated = item.isSelected
-
+            binding.root.isActivated = item.isSelected
             // Клик по кнопке Play/Pause аудиозаписи
             playPauseButton.setOnClickListener {
                 val position = bindingAdapterPosition
@@ -88,7 +82,8 @@ class AdapterChapters(
                     val context = itemView.context
                     try {
                         // 1. Читаем чистый текст из assets
-                        val rawText = context.assets.open(item.textPath).bufferedReader().use { it.readText() }
+                        val rawText = context.assets.open(item.textPath).bufferedReader()
+                            .use { it.readText() }
 
                         // 2. Создаем SpannableStringBuilder для раскраски отдельных частей текста
                         val spannableBuilder = SpannableStringBuilder(rawText)
