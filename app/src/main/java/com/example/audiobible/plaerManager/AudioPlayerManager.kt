@@ -13,6 +13,7 @@ import androidx.media3.common.Player
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.session.MediaController
 import androidx.media3.session.SessionToken
+import com.example.audiobible.dto.AudioItem
 import dagger.hilt.android.qualifiers.ApplicationContext
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -93,6 +94,8 @@ class AudioPlayerManager @Inject constructor(@ApplicationContext private val app
         }, Handler(Looper.getMainLooper())::post)
     }
 
+    var onNextTrackRequested: (() -> Unit)? = null
+
     private fun updateProgressRunnable() {
         val current = exoPlayer.currentPosition.toInt()
         val total = if (exoPlayer.duration == androidx.media3.common.C.TIME_UNSET) 0 else exoPlayer.duration.toInt()
@@ -114,36 +117,29 @@ class AudioPlayerManager @Inject constructor(@ApplicationContext private val app
 
         val packageName = appContext.packageName
         val uriString = "android.resource://$packageName/$rawResourceId"
-        val uri = Uri.parse(uriString)
 
-        // Заполняем метаданные на 100%, чтобы Media3 не скрывала уведомление на телефоне
-        val mediaMetadata = MediaMetadata.Builder()
-            .setTitle(chapterName.ifEmpty { "AudioBible" })
-            .setDisplayTitle(chapterName.ifEmpty { "AudioBible" })
-            .setArtist("Аудиобиблия")
-            .build()
-
-        val mediaItem = MediaItem.Builder()
-            .setUri(uri)
+        // 1. Создаем текущий трек
+        val currentMediaItem = MediaItem.Builder()
+            .setUri(Uri.parse(uriString))
             .setMediaId(uriString)
-            .setMediaMetadata(mediaMetadata)
+            .setMediaMetadata(MediaMetadata.Builder().setTitle(chapterName).build())
             .build()
 
-        if (exoPlayer.currentMediaItem?.mediaId == uriString) {
-            if (startPositionMs > 0) {
-                exoPlayer.seekTo(startPositionMs)
-            }
-            exoPlayer.play()
-        } else {
-            exoPlayer.setMediaItem(mediaItem)
-            exoPlayer.prepare()
-            exoPlayer.play()
-        }
+        // 2. Создаем пустой "хвостик" (фейковый трек)
+        // Как только Media3 увидит второй элемент, она САМА включит кнопку "Вперед" в шторке и на часах!
+        val fakeNextMediaItem = MediaItem.Builder()
+            .setUri(Uri.parse(uriString))
+            .setMediaId(uriString)
+            .setMediaMetadata(MediaMetadata.Builder().setTitle(chapterName).build())
+            .build()
 
-        _progressState.value = _progressState.value.copy(
-            name = chapterName
-        )
+        // Загружаем в плеер список из двух элементов вместо одного
+        exoPlayer.setMediaItems(listOf(currentMediaItem, fakeNextMediaItem))
+        exoPlayer.seekTo(0, startPositionMs)
+        exoPlayer.prepare()
+        exoPlayer.play()
     }
+
 
     // Подготовка трека из БД без авто-воспроизведения
     fun prepareTrackWithoutPlaying(audioRawId: Int, progressMs: Int, chapterName: String = "") {
@@ -227,4 +223,61 @@ class AudioPlayerManager @Inject constructor(@ApplicationContext private val app
         stopProgressUpdate()
         localPlayer.release()
     }
+
+    fun startPlaylist(chapters: List<AudioItem>, currentTrackIndex: Int, startPositionMs: Long = 0L) {
+        Log.d("AudioPlayerManager", "==> Запуск плейлиста кучей. Всего глав: ${chapters.size}, индекс: $currentTrackIndex")
+
+        try {
+            appContext.startService(Intent(appContext, AudioPlaybackService::class.java))
+        } catch (e: Exception) {
+            Log.e("AudioPlayerManager", "Ошибка старта сервиса: ${e.message}")
+        }
+
+        val packageName = appContext.packageName
+
+        val mediaItemsList = chapters.map { audioItem ->
+            // ЖЕЛЕЗОБЕТОННЫЙ ФОРМАТ URI ДЛЯ EXOPLAYER:
+            // Плееру часто нужен формат: android.resource://имя_пакета/raw/имя_ресурса
+            // Или числовой: android.resource://имя_пакета/число
+            // Мы соберем URI через официальный билдер, чтобы исключить синтаксические ошибки с косыми чертами
+            val uri = android.net.Uri.Builder()
+                .scheme(android.content.ContentResolver.SCHEME_ANDROID_RESOURCE)
+                .authority(packageName)
+                .path(audioItem.audioRawId.toString()) // Убедитесь, что тут именно имя свойства вашего ID (например, audioRawId)
+                .build()
+
+            val mediaId = uri.toString()
+
+            MediaItem.Builder()
+                .setUri(uri)
+                .setMediaId(mediaId)
+                .setMediaMetadata(
+                    MediaMetadata.Builder()
+                        .setTitle(audioItem.name) // Имя главы
+                        .setArtist("Аудиобиблия")
+                        .build()
+                )
+                .build()
+        }
+
+        if (mediaItemsList.isEmpty()) {
+            Log.e("AudioPlayerManager", "Список глав пуст, нечего загружать!")
+            return
+        }
+
+        // Загружаем всю кучу
+        exoPlayer.setMediaItems(mediaItemsList)
+
+        // Безопасно переходим на нужный индекс
+        val safeIndex = if (currentTrackIndex in mediaItemsList.indices) currentTrackIndex else 0
+        exoPlayer.seekTo(safeIndex, startPositionMs)
+
+        exoPlayer.prepare()
+        exoPlayer.play()
+
+        val currentChapter = chapters.getOrNull(safeIndex)
+        _progressState.value = _progressState.value.copy(name = currentChapter?.name ?: "")
+    }
+
+
 }

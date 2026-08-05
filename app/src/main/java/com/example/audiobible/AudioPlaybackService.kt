@@ -68,51 +68,21 @@ class AudioPlaybackService : MediaSessionService() {
             )
 
             // Создаем MediaSession и связываем его с ExoPlayer
-            // Создаем MediaSession и связываем его с ExoPlayer
             mediaSession = MediaSession.Builder(this, audioPlayerManager.exoPlayer)
                 .setSessionActivity(pendingIntent)
-                .setCallback(object : MediaSession.Callback() { // Добавили круглые скобки () к Callback
-
+                .setCallback(object : MediaSession.Callback {
+                    // Логируем системные команды управления (наушники, блютуз, шторка)
                     override fun onConnect(session: MediaSession, controller: MediaSession.ControllerInfo): MediaSession.ConnectionResult {
-                        Log.d(TAG, "==> [Callback] Подключился контроллер: ${controller.packageName}")
-
-                        // Разрешаем базовые команды подключения
-                        val connectionResult = super.onConnect(session, controller)
-
-                        // Жестко активируем кнопки "Вперед" и "Назад" для шторки и часов
-                        val playerCommands = Player.Commands.Builder()
-                            .add(Player.COMMAND_SEEK_TO_NEXT)
-                            .add(Player.COMMAND_SEEK_TO_PREVIOUS)
-                            .add(Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM)
-                            .add(Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM)
-                            .build()
-
-                        return MediaSession.ConnectionResult.accept(connectionResult.availableSessionCommands, playerCommands)
+                        Log.d(TAG, "==> [MediaSession.Callback] Подключился контроллер: ${controller.packageName}")
+                        return super.onConnect(session, controller)
                     }
 
-                    // МЕТОД ДЛЯ ПЕРЕХВАТА НАЖАТИЙ: Ловим клики по кнопкам "Вперед/Назад" со шторки и часов
-                    override fun onPlayerCommandRequest(
-                        session: MediaSession,
-                        controller: MediaSession.ControllerInfo,
-                        playerCommand: Int
-                    ): Int {
-                        if (playerCommand == Player.COMMAND_SEEK_TO_NEXT || playerCommand == Player.COMMAND_SEEK_TO_NEXT_MEDIA_ITEM) {
-                            Log.d(TAG, "==> Сигнал из шторки/часов: НАЖАТА КНОПКА ВПЕРЕД")
-                            // Вызываем переключение следующего трека в вашем менеджере
-                            audioPlayerManager.onNextTrackRequested?.invoke()
-                            return MediaSession.Callback.RESULT_SUCCESS // Говорим системе, что мы сами всё обработали
-                        }
-                        if (playerCommand == Player.COMMAND_SEEK_TO_PREVIOUS || playerCommand == Player.COMMAND_SEEK_TO_PREVIOUS_MEDIA_ITEM) {
-                            Log.d(TAG, "==> Сигнал из шторки/часов: НАЖАТА КНОПКА НАЗАД")
-                            // Вызываем переключение предыдущего трека в вашем менеджере
-                            audioPlayerManager.onPreviousTrackRequested?.invoke()
-                            return MediaSession.Callback.RESULT_SUCCESS
-                        }
-                        return super.onPlayerCommandRequest(session, controller, playerCommand)
+                    override fun onPostConnect(session: MediaSession, controller: MediaSession.ControllerInfo) {
+                        Log.d(TAG, "==> [MediaSession.Callback] Контроллер успешно авторизован: ${controller.packageName}")
+                        super.onPostConnect(session, controller)
                     }
                 })
                 .build()
-
 
             // Принудительно регистрируем провайдер уведомлений и вешаем системную иконку,
             // чтобы Android не блокировал уведомление из-за отсутствия SmallIcon
@@ -139,6 +109,8 @@ class AudioPlaybackService : MediaSessionService() {
         Log.d(TAG, "==> onGetSession: Система запросила сессию для пакета: ${controllerInfo.packageName}")
         return mediaSession
     }
+
+
 
     override fun onDestroy() {
         Log.w(TAG, "==> onDestroy: СЕРВИС УНИЧТОЖАЕТСЯ СИСТЕМОЙ!")

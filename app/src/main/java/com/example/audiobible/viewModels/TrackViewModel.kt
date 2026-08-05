@@ -70,6 +70,8 @@ class TrackViewModel @Inject constructor(
                 lastIsCompleted = nowCompleted
             }
         }
+
+
     }
 
     fun getCurrentPosition(): Int = currentPlayingPosition
@@ -119,7 +121,16 @@ class TrackViewModel @Inject constructor(
             currentPlayingChapterId = chapter.id
             currentPlayingPosition = position
 
-            playerManager.startRawTrack(chapter.audioRawId, chapterName = chapter.name)
+            // ДОСТАЕМ ВЕСЬ СПИСОК ИЗ LiveData (если он null, берем пустой список)
+            val allChapters = _chaptersData.value ?: emptyList()
+
+            // ЗАПУСКАЕМ! Передаем всю кучу глав и ИНДЕКС (position) текущей главы
+            playerManager.startPlaylist(
+                chapters = allChapters,
+                currentTrackIndex = position,
+                startPositionMs = 0L // Начинаем играть с начала главы
+            )
+
             // При старте отправляем в базу новую главу с активным селектором
             saveCurrentPlaybackPosition(chapter.copy(isSelected = true))
 
@@ -134,6 +145,7 @@ class TrackViewModel @Inject constructor(
             }
         }
     }
+
 
 
     fun saveCurrentPlaybackPosition(chapter: AudioItem) {
@@ -226,11 +238,11 @@ class TrackViewModel @Inject constructor(
     }
 
     fun nextTrack() {
-        // ViewModel теперь сама решает, какая следующая глава — мы работаем с БД и репозиторием здесь.
         viewModelScope.launch(Dispatchers.IO) {
             val last = bibleDao.getLastPlayedAudio()
+
+            // 1. ЕСЛИ В БАЗЕ НЕТ ЗАПИСИ (Старт с 1 книги, 1 главы)
             if (last == null) {
-                // Если записи нет, начинаем с первой книги, первой главы
                 val chapters = repository.getChaptersForBook(context, 1)
                 if (chapters.isNotEmpty()) {
                     val first = chapters[0]
@@ -238,10 +250,12 @@ class TrackViewModel @Inject constructor(
                     currentPlayingPosition = 0
                     currentPlayingChapterId = first.id
 
-                    // старт на главном потоке
                     withContext(Dispatchers.Main) {
-                        playerManager.startRawTrack(first.audioRawId, chapterName = first.name)
-                        _chaptersData.postValue(chapters.mapIndexed { i, c -> if (i == 0) c.copy(isPlaying = true, isSelected = true) else c.copy(isPlaying = false, isSelected = false) })
+                        // Загружаем ВСЮ КУЧУ глав первой книги, стартуем с 0-й позиции
+                        playerManager.startPlaylist(chapters, 0, 0L)
+                        _chaptersData.postValue(chapters.mapIndexed { i, c ->
+                            if (i == 0) c.copy(isPlaying = true, isSelected = true) else c.copy(isPlaying = false, isSelected = false)
+                        })
                     }
 
                     bibleDao.savePlaybackPosition(com.example.audiobible.bd.PlaybackHistory(0, 1, first.name, 0L, System.currentTimeMillis(), true))
@@ -249,43 +263,58 @@ class TrackViewModel @Inject constructor(
                 return@launch
             }
 
+            // 2. ЕСЛИ ЗАПИСЬ ЕСТЬ — ИЩЕМ ТЕКУЩУЮ КНИГУ СРЕДИ ГЛАВ
             val bookId = last.bookId
             val chapters = repository.getChaptersForBook(context, bookId)
             val currentIndex = chapters.indexOfFirst { it.name == last.chapterNumber }
             val nextIndex = currentIndex + 1
+
+            // 3. ЕСЛИ КНИГА ЗАКОНЧИЛАСЬ -> ПЕРЕХОДИМ НА СЛЕДУЮЩУЮ КНИГУ
             if (nextIndex >= chapters.size) {
-                // Переходим на следующую книгу
                 val candidate = if (bookId <= 0) 1 else bookId + 1
-                if (candidate > 66) return@launch
+                if (candidate > 66) return@launch // Конец Библии
+
                 val newChapters = repository.getChaptersForBook(context, candidate)
                 if (newChapters.isEmpty()) return@launch
+
                 val first = newChapters[0]
                 currentBookId = candidate
                 currentPlayingPosition = 0
                 currentPlayingChapterId = first.id
 
                 withContext(Dispatchers.Main) {
-                    playerManager.startRawTrack(first.audioRawId, chapterName = first.name)
-                    _chaptersData.postValue(newChapters.mapIndexed { i, c -> if (i == 0) c.copy(isPlaying = true, isSelected = true) else c.copy(isPlaying = false, isSelected = false) })
+                    // Загружаем ВСЮ КУЧУ глав уже НОВОЙ книги, стартуем с 0-го индекса
+                    playerManager.startPlaylist(newChapters, 0, 0L)
+                    _chaptersData.postValue(newChapters.mapIndexed { i, c ->
+                        if (i == 0) c.copy(isPlaying = true, isSelected = true) else c.copy(isPlaying = false, isSelected = false)
+                    })
                 }
 
                 bibleDao.savePlaybackPosition(com.example.audiobible.bd.PlaybackHistory(0, candidate, first.name, 0L, System.currentTimeMillis(), true))
                 return@launch
             }
 
+            // 4. ЕСЛИ СЛЕДУЮЩАЯ ГЛАВА В ЭТОЙ ЖЕ КНИГЕ (Media3 переключит её бесшовно!)
             val next = chapters[nextIndex]
             currentBookId = bookId
             currentPlayingPosition = nextIndex
             currentPlayingChapterId = next.id
 
             withContext(Dispatchers.Main) {
-                playerManager.startRawTrack(next.audioRawId, chapterName = next.name)
-                _chaptersData.postValue(chapters.mapIndexed { i, c -> if (i == nextIndex) c.copy(isPlaying = true, isSelected = true) else c.copy(isPlaying = false, isSelected = false) })
+                // Плеер уже содержит плейлист этой книги! Мы просто просим его переключиться на следующий индекс нативно
+                playerManager.exoPlayer.seekToNextMediaItem()
+                playerManager.play()
+
+                // Обновляем галочки в интерфейсе приложения
+                _chaptersData.postValue(chapters.mapIndexed { i, c ->
+                    if (i == nextIndex) c.copy(isPlaying = true, isSelected = true) else c.copy(isPlaying = false, isSelected = false)
+                })
             }
 
             bibleDao.savePlaybackPosition(com.example.audiobible.bd.PlaybackHistory(0, bookId, next.name, 0L, System.currentTimeMillis(), true))
         }
     }
+
 
     private fun advanceToNextBook() {
         // Если currentBookId не задан, пытаемся начать с первой книги
@@ -316,18 +345,34 @@ class TrackViewModel @Inject constructor(
             val chapters = repository.getChaptersForBook(context, bookId)
             val currentIndex = chapters.indexOfFirst { it.name == last.chapterNumber }
             val prevIndex = currentIndex - 1
-            if (prevIndex < 0) return@launch
+
+            // Если мы вышли за начало книги (нажали Назад на первой главе)
+            if (prevIndex < 0) {
+                // Тут при желании можно добавить переход на последнюю главу ПРЕДЫДУЩЕЙ книги.
+                // Пока оставляем ваш стандартный возврат, чтобы ничего не ломать.
+                return@launch
+            }
+
             val prev = chapters[prevIndex]
             currentBookId = bookId
             currentPlayingPosition = prevIndex
             currentPlayingChapterId = prev.id
+
             withContext(Dispatchers.Main) {
-                playerManager.startRawTrack(prev.audioRawId, chapterName = prev.name)
-                _chaptersData.postValue(chapters.mapIndexed { i, c -> if (i == prevIndex) c.copy(isPlaying = true, isSelected = true) else c.copy(isPlaying = false, isSelected = false) })
+                // Просим ExoPlayer нативно вернуться на один трек назад в плейлисте книги
+                playerManager.exoPlayer.seekToPreviousMediaItem()
+                playerManager.play()
+
+                // Обновляем зелёную подсветку и статус воспроизведения в списке приложения
+                _chaptersData.postValue(chapters.mapIndexed { i, c ->
+                    if (i == prevIndex) c.copy(isPlaying = true, isSelected = true) else c.copy(isPlaying = false, isSelected = false)
+                })
             }
+
             bibleDao.savePlaybackPosition(com.example.audiobible.bd.PlaybackHistory(0, bookId, prev.name, 0L, System.currentTimeMillis(), true))
         }
     }
+
 
     fun seekTo(positionMs: Int) {
         playerManager.seekTo(positionMs)
