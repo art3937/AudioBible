@@ -43,6 +43,20 @@ class AudioPlaybackService : MediaSessionService() {
         }
     }
 
+    // Внутри AudioPlaybackService.kt
+
+    @OptIn(androidx.media3.common.util.UnstableApi::class)
+    override fun onUpdateNotification(session: MediaSession, startInForegroundRequired: Boolean) {
+        // Если плеер НЕ играет, мы разрешаем сервису полностью завершить работу (stopSelf)
+        // Это предотвратит повторное настойчивое появление шторки при смахивании!
+        if (!session.player.isPlaying && !session.player.playWhenReady) {
+            stopSelf()
+            return
+        }
+        super.onUpdateNotification(session, startInForegroundRequired)
+    }
+
+
     @OptIn(UnstableApi::class)
     override fun onCreate() {
         super.onCreate()
@@ -110,20 +124,23 @@ class AudioPlaybackService : MediaSessionService() {
         return mediaSession
     }
 
-
-
     override fun onDestroy() {
         Log.w(TAG, "==> onDestroy: СЕРВИС УНИЧТОЖАЕТСЯ СИСТЕМОЙ!")
         try {
+            // ЖЕЛЕЗОБЕТОННО УБИРАЕМ ЛИСТЕНЕР СЕРВИСА ИЗ ПЛЕЕРА!
+            // Это предотвратит утечки памяти и ложные срабатывания в фоне
             audioPlayerManager.exoPlayer.removeListener(playerListener)
-            mediaSession?.run {
-                player.release()
-                release()
+
+            mediaSession?.let { session ->
+                session.release() // Освобождаем сессию шторки
+                mediaSession = null
             }
-            mediaSession = null
+            Log.d(TAG, "==> onDestroy: Ресурсы сервиса успешно очищены")
         } catch (e: Exception) {
-            Log.e(TAG, "Ошибка при очистке ресурсов в onDestroy: ${e.message}", e)
+            Log.e(TAG, "Ошибка в onDestroy сервиса: ${e.message}", e)
         }
         super.onDestroy()
     }
+
+
 }

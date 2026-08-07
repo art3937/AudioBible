@@ -92,15 +92,23 @@ class FragmentChapter() : Fragment(), AdapterChapters.OnAudioClickListener {
             binding.layoutMiniPlayer.pivotY = binding.layoutMiniPlayer.height.toFloat()
         }
 
-        // Подписка на состояние плеера и управление мини-плеером (перенесено из AppActivity)
+        // Подписка на состояние плеера и управление мини-плеером
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.playerState.collectLatest { state ->
-                    if (state.total > 0 /*&& state.isPlaying*/) {
-                       // showMiniPlayer()
+
+                    // КРИТИЧЕСКАЯ ПРОВЕРКА: Получаем ID книги, которая сейчас открыта на этом экране.
+                    // (Убедитесь, что метод getCurrentBookId() или переменная bookId доступны во ViewModel,
+                    // либо вытащите её напрямую из аргументов фрагмента, например: val currentBookId = arguments?.getInt("BOOK_ID") ?: -1)
+                    val openedBookId = viewModel.getCurrentBookId()
+
+                    // Если плеер заряжен И играет книга именно ЭТОГО экрана — показываем мини-плеер
+                    if (state.total > 0 && state.playingBookId == openedBookId) {
+
                         binding.layoutMiniPlayer.isVisible = true
                         binding.textMiniPlayerTitle.text = state.name
                         binding.seekBarMiniPlayer.max = state.total
+
                         if (!isUserTrackingSeekBar) {
                             binding.seekBarMiniPlayer.progress = state.current
                             binding.textCurrentTime.text = state.currentStr
@@ -108,17 +116,16 @@ class FragmentChapter() : Fragment(), AdapterChapters.OnAudioClickListener {
 
                         binding.textTotalTime.text = state.totalStr
                     } else {
-                        //hideMiniPlayer()
+                        // Если плеер пуст ИЛИ играет глава из СОВСЕМ ДРУГОЙ книги — прячем мини-плеер
+                        binding.layoutMiniPlayer.isVisible = false
                     }
 
                     val iconRes = if (state.isPlaying) R.drawable.pause else R.drawable.play
                     binding.buttonMiniPlayerPlayPause.setImageResource(iconRes)
-
-                    // Обновляем нотификацию из Fragment через ViewModel состояние
-                  //  updateMediaNotification(state)
                 }
             }
         }
+
 
         // Обработка клика Play/Pause мини-плеера
         binding.buttonMiniPlayerPlayPause.setOnClickListener {

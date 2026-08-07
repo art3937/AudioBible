@@ -52,27 +52,63 @@ class TrackViewModel @Inject constructor(
 
     val playerState = playerManager.progressState
 
+    // Добавьте этот метод внутрь TrackViewModel.kt, чтобы фрагмент мог узнать открытый ID книги
+    fun getCurrentBookId(): Int = currentBookId
 
 
     init {
         // Попытка восстановить последний глобальный трек при старте ViewModel
         restoreLastGlobalTrack()
 
-        // Автопереключение на следующий трек при окончании текущего
+        // 1. Автопереключение на следующий трек при окончании текущего (у вас уже есть)
         viewModelScope.launch {
             var lastIsCompleted = false
             playerManager.progressState.collect { state ->
                 val nowCompleted = state.isTrackCompleted
                 if (!lastIsCompleted && nowCompleted) {
-                    // трек только что завершился
                     nextTrack()
                 }
                 lastIsCompleted = nowCompleted
             }
         }
 
+        // 2. НОВЫЙ БЛОК: Синхронизация выделения элементов в списке при переключении со шторки
+        viewModelScope.launch {
+            playerManager.progressState.collect { state ->
+                val currentList = _chaptersData.value ?: return@collect
 
+                // Если индекс плеера валиден для нашего текущего списка
+                if (state.currentTrackIndex >= 0 && state.currentTrackIndex < currentList.size) {
+
+                    // Проверяем, изменилось ли состояние, чтобы не гонять DiffUtil вхолостую каждые 500мс
+                    val targetChapter = currentList[state.currentTrackIndex]
+                    if (!targetChapter.isSelected || targetChapter.isPlaying != state.isPlaying) {
+
+                        // Перемапливаем список: активному треку ставим true, остальным сбрасываем
+                        val updatedList = currentList.mapIndexed { index, audioItem ->
+                            val isCurrent = index == state.currentTrackIndex
+                            audioItem.copy(
+                                isSelected = isCurrent,
+                                isPlaying = isCurrent && state.isPlaying
+                            )
+                        }
+
+                        // Обновляем LiveData на Главном потоке
+                        _chaptersData.value = updatedList
+
+                        // Синхронизируем локальные ID вьюмодели с тем, что играет в фоне
+                        currentPlayingPosition = state.currentTrackIndex
+                        currentPlayingChapterId = updatedList[state.currentTrackIndex].id
+
+                        // Опционально: автоматически сохраняем позицию новой главы в БД
+                        saveCurrentPlaybackPosition(updatedList[state.currentTrackIndex])
+                    }
+                }
+            }
+        }
     }
+
+
 
     fun getCurrentPosition(): Int = currentPlayingPosition
 
@@ -107,44 +143,36 @@ class TrackViewModel @Inject constructor(
         val isPlayingCurrent = currentPlayingChapterId == chapter.id && playerManager.isPlaying
 
         if (isPlayingCurrent) {
-            // При паузе отправляем в базу состояние с сохраненным выделением
+            // 1. Если играло — просто ставим на паузу.
+            // Сохраняем позицию, тушим плеер.
             saveCurrentPlaybackPosition(chapter.copy(isSelected = true))
             playerManager.pause()
-            currentPlayingChapterId = -1
-            currentPlayingPosition = -1
 
-            // На паузе трек перестает играть (isPlaying = false), но выделение (isSelected) ОСТАЕТСЯ true
-            _chaptersData.value = _chaptersData.value?.map {
-                if (it.id == chapter.id) it.copy(isPlaying = false, isSelected = true) else it
-            }
+            // УДАЛЕНО: Больше вручную список тут не перемапливаем!
+            // Корутина в init{} сама увидит паузу плеера и плавно обновит UI.
+
         } else {
+            // 2. Если не играло — запускаем.
             currentPlayingChapterId = chapter.id
             currentPlayingPosition = position
 
-            // ДОСТАЕМ ВЕСЬ СПИСОК ИЗ LiveData (если он null, берем пустой список)
             val allChapters = _chaptersData.value ?: emptyList()
 
-            // ЗАПУСКАЕМ! Передаем всю кучу глав и ИНДЕКС (position) текущей главы
+            // Запускаем плейлист.
             playerManager.startPlaylist(
                 chapters = allChapters,
                 currentTrackIndex = position,
-                startPositionMs = 0L // Начинаем играть с начала главы
+                startPositionMs = 0L
             )
 
-            // При старте отправляем в базу новую главу с активным селектором
             saveCurrentPlaybackPosition(chapter.copy(isSelected = true))
 
-            // Переключаем элементы в оперативной памяти:
-            // Текущему треку ставим и воспроизведение, и выделение в true. Всем остальным сбрасываем оба флага в false.
-            _chaptersData.value = _chaptersData.value?.map {
-                if (it.id == chapter.id) {
-                    it.copy(isPlaying = true, isSelected = true)
-                } else {
-                    it.copy(isPlaying = false, isSelected = false)
-                }
-            }
+            // УДАЛЕНО: Больше вручную список тут не перемапливаем!
+            // Плееру нужно время на подготовку. Когда он реально заиграет,
+            // корутина в init{} поймает это и четко, без мигания, включит иконку Паузы.
         }
     }
+
 
 
 
@@ -204,6 +232,7 @@ class TrackViewModel @Inject constructor(
                 if (targetTrack != null) {
                     currentPlayingChapterId = targetTrack.id
                     withContext(Dispatchers.Main) {
+                        playerManager.setPlayingBookId(currentBookId)
                         // Prepare track without playing
                         playerManager.prepareTrackWithoutPlaying(
                             targetTrack.audioRawId,
@@ -332,7 +361,7 @@ class TrackViewModel @Inject constructor(
             currentPlayingChapterId = first.id
 
             withContext(Dispatchers.Main) {
-                playerManager.startRawTrack(first.audioRawId, chapterName = first.name)
+              //  playerManager.startRawTrack(first.audioRawId, chapterName = first.name)
                 _chaptersData.postValue(newChapters.mapIndexed { i, c -> if (i == 0) c.copy(isPlaying = true, isSelected = true) else c.copy(isPlaying = false, isSelected = false) })
             }
         }
@@ -379,12 +408,39 @@ class TrackViewModel @Inject constructor(
     }
 
     fun resumeTrack() {
-        _chaptersData.value = _chaptersData.value?.map {
-            if (it.id == currentPlayingChapterId) it.copy(isPlaying = true) else it
-        }
-        playerManager.exoPlayer.play()
+        val currentList = _chaptersData.value ?: emptyList()
+        Log.d("TrackViewModel", "==> resumeTrack: Нажата кнопка мини-плеера. Позиция: $currentPlayingPosition, ID главы: $currentPlayingChapterId")
 
+        // ПИНГ СЕРВИСА (чтобы сразу вылезла шторка)
+        try {
+            context.startService(android.content.Intent(context, com.example.audiobible.plaerManager.AudioPlaybackService::class.java))
+        } catch (e: Exception) {
+            Log.e("TrackViewModel", "Ошибка старта сервиса: ${e.message}")
+        }
+
+        // ЛОГИКА ЗАПУСКА:
+        // Если в плеере УЖЕ загружен трек (после prepareTrackWithoutPlaying), просто даем команду play()
+        if (playerManager.exoPlayer.currentMediaItem != null) {
+            Log.d("TrackViewModel", "==> resumeTrack: Плеер уже был подготовлен, просто вызываем play()")
+            playerManager.exoPlayer.play()
+        }
+        // ЗАЩИТА: Если после перезапуска плеер оказался пуст, но у нас есть сохраненная позиция в памяти
+        else if (currentPlayingPosition != -1 && currentList.isNotEmpty()) {
+            Log.w("TrackViewModel", "==> resumeTrack: Плеер оказался пуст. Запускаем плейлист заново с индекса $currentPlayingPosition")
+
+            // Получаем прогресс из текущего состояния плеера (или 0)
+            val savedProgress = playerManager.progressState.value.current.toLong()
+
+            playerManager.startPlaylist(
+                chapters = currentList,
+                currentTrackIndex = currentPlayingPosition,
+                startPositionMs = if (savedProgress > 0) savedProgress else 0L
+            )
+        } else {
+            Log.e("TrackViewModel", "==> resumeTrack: Нечего воспроизводить. Индекс = -1 или список пуст.")
+        }
     }
+
 
     fun pauseTrack() {
         _chaptersData.value = _chaptersData.value?.map {
