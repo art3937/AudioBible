@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Кастомный стиль для выпадающего окна PopupMenu -->
+    <style name="Widget.AudioBible.PopupMenu" parent="Widget.AppCompat.PopupMenu">
+        <!-- Ссылка на наш круглый/овальный полупрозрачный фон -->
+        <!-- Для меню мы используем прямоугольный вариант (создадим в Шаге 2) -->
+        <item name="android:popupBackground">@drawable/bg_floating_popup_menu</item>
+    </style>
+
+    <!-- Стиль текста внутри нашего меню -->
+    <style name="TextAppearance.AudioBible.PopupMenuItem" parent="TextAppearance.AppCompat.Widget.PopupMenu.Large">
+        <item name="android:textColor">#FFFFFF</item>
+        <item name="android:textSize">16sp</item>
+    </style>
+
+    <!-- Специальная тема-обёртка, которую мы скормим коду -->
+    <style name="Theme.AudioBible.PopupWrapper" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="popupMenuStyle">@style/Widget.AudioBible.PopupMenu</item>
+        <item name="android:textAppearanceLargePopupMenu">@style/TextAppearance.AudioBible.PopupMenuItem</item>
+    </style>
+
+</resources>

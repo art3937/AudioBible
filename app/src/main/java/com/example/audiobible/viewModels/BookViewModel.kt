@@ -2,7 +2,6 @@
 
 import android.util.Log
 import androidx.lifecycle.LiveData
-import androidx.lifecycle.MediatorLiveData
 import androidx.lifecycle.MutableLiveData
 import androidx.lifecycle.SavedStateHandle
 import androidx.lifecycle.ViewModel
@@ -13,12 +12,7 @@ import com.example.audiobible.repository.BibleRepository
 import com.example.audiobible.repository.BookStateRepository
 import dagger.hilt.android.lifecycle.HiltViewModel
 import kotlinx.coroutines.ExperimentalCoroutinesApi
-import kotlinx.coroutines.flow.SharingStarted
 import kotlinx.coroutines.flow.StateFlow
-import kotlinx.coroutines.flow.flatMapLatest
-import kotlinx.coroutines.flow.onEach
-import kotlinx.coroutines.flow.stateIn
-import kotlinx.coroutines.flow.collect
 import kotlinx.coroutines.launch
 import javax.inject.Inject
 
@@ -35,61 +29,54 @@ class BookViewModel @Inject constructor(
         private const val DEFAULT_BOOK_ID = 1
     }
 
-    // 1. Поток с ID текущей книги (нужен для SavedStateHandle)
     val bookIdFlow: StateFlow<Int> = savedStateHandle.getStateFlow(KEY_BOOK_ID, DEFAULT_BOOK_ID)
-
-    // 2. Поток состояния конкретной книги с автосохранением в БД
-
 
     private val _booksLiveData = MutableLiveData<List<Book>?>()
     val booksLiveData: LiveData<List<Book>> = _booksLiveData as LiveData<List<Book>>
 
     init {
+        loadBooksWithState()
+    }
+
+    // Вынесли в отдельный метод, чтобы вызывать при старте и возврате
+    fun loadBooksWithState() {
         viewModelScope.launch {
-            // 1. Параллельно или последовательно загружаем данные
             val fromBd = repo.getBookState()
             val rawBooks = bibleRepo.getTestBooks()
 
-            // 2. Трансформируем список книг один раз, учитывая состояние из БД
             val updatedList = rawBooks.map { book ->
                 val isCurrentBook = book.id == fromBd?.bookId
                 book.copy(
-                    // Если id совпадает, то true, иначе false (снимаем выделение со старых книг)
                     isSelected = isCurrentBook,
-                    // Меняем цвет фона только у выбранной книги, у остальных оставляем дефолтный
-                    backgroundColor = if (isCurrentBook && fromBd?.backgroundColor != null) {
-                        fromBd.backgroundColor
-                    } else {
-                        book.backgroundColor
-                    }
+                    // ЖЕЛЕЗОБЕТОННО: Берем только родной цвет из BibleRepository!
+                    backgroundColor = book.backgroundColor
                 )
             }
-
-            // 3. Публикуем финальный готовый список в LiveData
             _booksLiveData.value = updatedList
         }
     }
 
-
     // Метод переключения книги (вызывается при клике во фрагменте)
     fun selectBook(newBookId: Int) {
-        val currentList = _booksLiveData.value ?: return
-        val updatedList = currentList.map { book ->
-            book.copy(isSelected = book.id == newBookId, backgroundColor = "#2E5298")
+        val rawBooks = bibleRepo.getTestBooks()
+
+        // 1. Мгновенно обновляем флаг выделения в UI, сохраняя оригинальные цвета
+        val updatedList = rawBooks.map { book ->
+            book.copy(
+                isSelected = book.id == newBookId,
+                backgroundColor = book.backgroundColor // Никакого хардкода цвета!
+            )
         }
-
         _booksLiveData.value = updatedList
-     //   savedStateHandle[KEY_BOOK_ID] = newBookId
-        
-        // ИНИЦИАЛИЗИРУЕМ BookState в БД при первом открытии
-        viewModelScope.launch {
-            val selectedBook = currentList.find { it.id == newBookId } ?: return@launch
 
-            // Создаем новый BookState с цветом из Book
+        // 2. Сохраняем BookState в БД
+        viewModelScope.launch {
+            val selectedBook = rawBooks.find { it.id == newBookId } ?: return@launch
+
             val newBookState = BookState(
                 bookId = newBookId,
                 name = selectedBook.name,
-                backgroundColor = selectedBook.backgroundColor,
+                backgroundColor = selectedBook.backgroundColor, // Сохраняем в БД ее РОДНОЙ цвет
                 selectedChapter = 1
             )
             repo.save(newBookState)
@@ -98,5 +85,3 @@ class BookViewModel @Inject constructor(
 
     fun getBooks(): List<Book> = bibleRepo.getTestBooks()
 }
-
-

@@ -103,7 +103,7 @@ class FragmentChapter() : Fragment(), AdapterChapters.OnAudioClickListener {
                     val openedBookId = viewModel.getCurrentBookId()
 
                     // Если плеер заряжен И играет книга именно ЭТОГО экрана — показываем мини-плеер
-                    if (state.total > 0 && state.playingBookId == openedBookId) {
+                    if (state.total > 0 && state.playingBookId == openedBookId ) {
 
                         binding.layoutMiniPlayer.isVisible = true
                         binding.textMiniPlayerTitle.text = state.name
@@ -256,7 +256,11 @@ class FragmentChapter() : Fragment(), AdapterChapters.OnAudioClickListener {
         viewModel.toggleChapter(item, position)
     }
 
-//пока не нужно но может потом пригодится
+    override fun onLikeClick(item: AudioItem) {
+        viewModel.toggleLike(item)
+    }
+
+    //пока не нужно но может потом пригодится
     private fun showMiniPlayer() {
         binding.layoutMiniPlayer.isVisible = true
         binding.hide.animate().rotation(180f).setDuration(200).start()

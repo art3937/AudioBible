@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <navigation xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
     android:id="@+id/nav_main"
     app:startDestination="@id/feedFragment">
 
@@ -17,4 +18,12 @@
         android:id="@+id/fragmentChapter2"
         android:name="com.example.audiobible.fragments.FragmentChapter"
         android:label="Выбор главы" /> <!-- Здесь было "FragmentChapter" -->
+
+    <!-- Внутри nav_main.xml -->
+    <fragment
+        android:id="@+id/favoriteFragment"
+        android:name="com.example.audiobible.fragments.FavoriteFragment"
+        android:label="Избранное"
+        tools:layout="@layout/fragment_favorite" />
+
 </navigation>

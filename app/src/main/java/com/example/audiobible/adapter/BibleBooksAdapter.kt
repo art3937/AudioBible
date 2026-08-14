@@ -31,8 +31,9 @@ class BibleBooksAdapter(
             val bookItem = getItem(position)
             for (payload in payloads) {
                 if (payload == BookDiffCallback.PAYLOAD_SELECTION_CHANGED) {
-                    // Передаем РЕАЛЬНОЕ состояние из объекта книги, который обновила LiveData
-                    holder.updateSelectionState(bookItem.isSelected)
+                    // ВТОРОЙ ВАРИАНТ: Передаем объект книги целиком,
+                    // чтобы обновить и текст, и зафиксировать правильный цвет фона
+                    holder.updateSelectionState(bookItem)
                 }
             }
         }
@@ -48,19 +49,12 @@ class BibleBooksAdapter(
         private val binding: CardChapterBinding
     ) : RecyclerView.ViewHolder(binding.root) {
 
-        // Полная сборка карточки
+        // Полная сборка карточки при первом появлении
         fun bind(book: Book) {
             binding.textViewTitle.text = book.name
 
             // Напрямую связываем визуальное состояние с полем модели данных
-            updateSelectionState(book.isSelected)
-
-            // Ваша логика безопасной покраски фона карточки
-            try {
-                binding.layoutBackground.setBackgroundColor(book.backgroundColor.toColorInt())
-            } catch (e: Exception) {
-                binding.layoutBackground.setBackgroundColor(Color.DKGRAY)
-            }
+            updateSelectionState(book)
 
             // Клик по всей карточке для перехода на фрагмент с главами
             binding.root.setOnClickListener {
@@ -68,17 +62,24 @@ class BibleBooksAdapter(
             }
         }
 
-        // Точечное обновление состояния (вызывается через payloads)
-        fun updateSelectionState(isSelected: Boolean) {
-            binding.root.isActivated = isSelected
-            binding.textViewTitle.alpha = if (isSelected) 1.0f else 0.75f
+        // Обновление состояния выделения И цвета фона карточки (вызывается и при bind, и через payloads)
+        fun updateSelectionState(book: Book) {
+            binding.root.isActivated = book.isSelected
+            binding.textViewTitle.alpha = if (book.isSelected) 1.0f else 0.75f
 
-            // Подстраховка на случай, если в XML цвет фона не реагирует на isActivated.
-            // Если книга выбрана — сделаем текст зеленым, иначе белым.
-            if (isSelected) {
+            // Если книга выбрана — делаем текст желтым, иначе белым
+            if (book.isSelected) {
                 binding.textViewTitle.setTextColor(Color.YELLOW)
             } else {
                 binding.textViewTitle.setTextColor(Color.WHITE)
+            }
+
+            // ЖЕЛЕЗОБЕТОННЫЙ ФИКС: Принудительно накатываем родной цвет фона книги из репозитория.
+            // Теперь кэш RecyclerView больше не сможет подставить чужой цвет при обновлении флагов!
+            try {
+                binding.layoutBackground.setBackgroundColor(book.backgroundColor.toColorInt())
+            } catch (e: Exception) {
+                binding.layoutBackground.setBackgroundColor(Color.DKGRAY)
             }
         }
     }

@@ -19,61 +19,83 @@
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:background="@drawable/bg_chapter_card"
-        android:padding="20dp">
+        android:padding="16dp">
 
-        <!-- Название главы — теперь не упирается прямо в кнопку плеера -->
+        <!-- НАЗВАНИЕ ГЛАВЫ: Динамически занимает всё свободное место слева -->
         <TextView
             android:id="@+id/textViewTitle"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginEnd="8dp"
+            android:layout_marginEnd="16dp"
+            android:ellipsize="end"
             android:maxLines="1"
             android:textColor="#FFFFFF"
             android:textSize="18sp"
             android:textStyle="bold"
             app:layout_constraintBottom_toBottomOf="@id/buttonPlayPause"
-            app:layout_constraintEnd_toStartOf="@id/imageViewArrow"
+            app:layout_constraintEnd_toStartOf="@id/buttonLike"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintTop_toTopOf="@id/buttonPlayPause"
             tools:text="Глава 1" />
 
-        <!-- НОВАЯ ГАЛОЧКА: Иконка стрелочки для раскрытия текста -->
+        <!-- КНОПКА ЛАЙКА: Изящное сердечко по Material гайдлайнам -->
+        <ImageButton
+            android:id="@+id/buttonLike"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginEnd="4dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Добавить в избранное"
+            android:scaleType="centerInside"
+            app:srcCompat="@drawable/heart"
+            app:tint="#FFFFFF"
+            app:layout_constraintBottom_toBottomOf="@id/buttonPlayPause"
+            app:layout_constraintEnd_toStartOf="@id/imageViewArrow"
+            app:layout_constraintTop_toTopOf="@id/buttonPlayPause" />
+
+        <!-- ГАЛОЧКА: Иконка стрелочки для раскрытия текста -->
         <ImageView
             android:id="@+id/imageViewArrow"
-            android:layout_width="24dp"
-            android:layout_height="24dp"
-            android:layout_marginEnd="16dp"
+            android:layout_width="32dp"
+            android:layout_height="32dp"
+            android:layout_marginEnd="12dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="Развернуть текст"
+            android:padding="4dp"
+            android:scaleType="centerInside"
             android:src="@android:drawable/arrow_down_float"
+            app:tint="#FFFFFF"
             app:layout_constraintBottom_toBottomOf="@id/buttonPlayPause"
             app:layout_constraintEnd_toStartOf="@id/buttonPlayPause"
-            app:layout_constraintTop_toTopOf="parent"
-            app:tint="#FFFFFF" />
+            app:layout_constraintTop_toTopOf="@id/buttonPlayPause" />
 
-        <!-- Кнопка Play/Pause -->
+        <!-- КНОПКА PLAY/PAUSE: Главный экшен, зафиксирован на правом краю -->
         <ImageButton
             android:id="@+id/buttonPlayPause"
             android:layout_width="44dp"
             android:layout_height="44dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="Воспроизведение"
+            android:scaleType="centerInside"
             android:src="@android:drawable/ic_media_play"
+            app:tint="#FFFFFF"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="parent" />
 
-        <!-- Скрытый текст главы (выпадает строго под textViewTitle) -->
+        <!-- СКРЫТЫЙ ТЕКСТ ГЛАВЫ: Выпадает строго внизу на всю ширину ячейки -->
         <TextView
             android:id="@+id/textViewChapterContent"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
+            android:lineSpacingMultiplier="1.2"
             android:textColor="#E2E8F0"
             android:textSize="15sp"
             android:visibility="gone"
             app:layout_constraintBottom_toBottomOf="parent"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintStart_toStartOf="parent"
-            app:layout_constraintTop_toBottomOf="@id/textViewTitle"
+            app:layout_constraintTop_toBottomOf="@id/buttonPlayPause"
             tools:text="1. В начале сотворил Бог небо и землю...\n2. Земля же была безвидна и пуста..."
             tools:visibility="visible" />
 

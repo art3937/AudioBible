@@ -53,8 +53,7 @@ class AudioPlayerManager @Inject constructor(
     private val handler = Handler(Looper.getMainLooper())
 
     private val sessionToken = SessionToken(
-        appContext,
-        android.content.ComponentName(appContext, AudioPlaybackService::class.java)
+        appContext, android.content.ComponentName(appContext, AudioPlaybackService::class.java)
     )
 
     // Контроллер нужен только для поддержания связи с MediaSessionService (для вывода шторки)
@@ -101,7 +100,8 @@ class AudioPlayerManager @Inject constructor(
                     try {
                         val intent = Intent(appContext, AudioPlaybackService::class.java)
                         appContext.startService(intent)
-                    } catch (e: Exception) { /* игнорируем */ }
+                    } catch (e: Exception) { /* игнорируем */
+                    }
                 }
             }
 
@@ -121,7 +121,10 @@ class AudioPlayerManager @Inject constructor(
         controllerFuture.addListener({
             try {
                 mediaController = controllerFuture.get()
-                Log.d("AudioPlayerManager", "==> Контроллер успешно подключен к MediaSession. Шторка синхронизирована.")
+                Log.d(
+                    "AudioPlayerManager",
+                    "==> Контроллер успешно подключен к MediaSession. Шторка синхронизирована."
+                )
             } catch (e: Exception) {
                 Log.e("AudioPlayerManager", "Ошибка подключения MediaController: ${e.message}")
             }
@@ -156,31 +159,30 @@ class AudioPlayerManager @Inject constructor(
     }
 
     // Воспроизведение списка (плейлиста) из БД кучей
-    fun startPlaylist(chapters: List<AudioItem>, currentTrackIndex: Int, startPositionMs: Long = 0L) {
-        Log.d("AudioPlayerManager", "==> Запуск плейлиста кучей. Всего глав: ${chapters.size}, индекс: $currentTrackIndex")
+    fun startPlaylist(
+        chapters: List<AudioItem>,
+        currentTrackIndex: Int,
+        startPositionMs: Long = 0L,
+        bookId: Int = 0
+    ) {
+        Log.d(
+            "AudioPlayerManager",
+            "==> Запуск плейлиста кучей. Всего глав: ${chapters.size}, индекс: $currentTrackIndex"
+        )
 
-
+        currentPlayingBookId = bookId
 
         val packageName = appContext.packageName
 
         // Собираем список MediaItem из списка глав через официальный Uri.Builder
         val mediaItemsList = chapters.map { audioItem ->
-            val uri = Uri.Builder()
-                .scheme(android.content.ContentResolver.SCHEME_ANDROID_RESOURCE)
-                .authority(packageName)
-                .path(audioItem.audioRawId.toString())
-                .build()
+            val uri = Uri.Builder().scheme(android.content.ContentResolver.SCHEME_ANDROID_RESOURCE)
+                .authority(packageName).path(audioItem.audioRawId.toString()).build()
 
-            MediaItem.Builder()
-                .setUri(uri)
-                .setMediaId(uri.toString())
-                .setMediaMetadata(
-                    MediaMetadata.Builder()
-                        .setTitle(audioItem.name)
-                        .setArtist("Аудиобиблия")
+            MediaItem.Builder().setUri(uri).setMediaId(uri.toString()).setMediaMetadata(
+                    MediaMetadata.Builder().setTitle(audioItem.name).setArtist("Аудиобиблия")
                         .build()
-                )
-                .build()
+                ).build()
         }
 
         if (mediaItemsList.isNotEmpty()) {
@@ -198,16 +200,12 @@ class AudioPlayerManager @Inject constructor(
         try {
             val uriString = "android.resource://${appContext.packageName}/$audioRawId"
 
-            val mediaMetadata = MediaMetadata.Builder()
-                .setTitle(chapterName.ifEmpty { "AudioBible" })
-                .setArtist("Аудиобиблия")
-                .build()
+            val mediaMetadata =
+                MediaMetadata.Builder().setTitle(chapterName.ifEmpty { "AudioBible" })
+                    .setArtist("Аудиобиблия").build()
 
-            val mediaItem = MediaItem.Builder()
-                .setUri(Uri.parse(uriString))
-                .setMediaId(uriString)
-                .setMediaMetadata(mediaMetadata)
-                .build()
+            val mediaItem = MediaItem.Builder().setUri(Uri.parse(uriString)).setMediaId(uriString)
+                .setMediaMetadata(mediaMetadata).build()
 
             exoPlayer.playWhenReady = false
             exoPlayer.setMediaItem(mediaItem)
@@ -218,8 +216,7 @@ class AudioPlayerManager @Inject constructor(
                 isPlaying = false,
                 current = progressMs,
                 currentStr = formatTime(progressMs),
-                name = chapterName.ifEmpty { "Библия — Загрузка..." }
-            )
+                name = chapterName.ifEmpty { "Библия — Загрузка..." })
         } catch (e: Exception) {
             e.printStackTrace()
         }

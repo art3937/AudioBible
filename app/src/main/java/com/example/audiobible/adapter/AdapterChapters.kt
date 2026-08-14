@@ -33,6 +33,7 @@ class AdapterChapters(
 
     interface OnAudioClickListener {
         fun onPlayPauseClick(item: AudioItem)
+        fun onLikeClick(item: AudioItem) // НОВЫЙ МЕТОД ДЛЯ ЛАЙКА
     }
 
     class ChapterViewHolder(
@@ -45,6 +46,23 @@ class AdapterChapters(
             item: AudioItem, listener: OnAudioClickListener, onChapterClick: (AudioItem) -> Unit
         ) {
             binding.textViewTitle.text = item.name
+
+
+            binding.buttonLike.setOnClickListener {
+                val position = bindingAdapterPosition
+                if (position != RecyclerView.NO_POSITION) {
+                    listener.onLikeClick(item) // Передаем клик в листенер!
+                }
+            }
+            // Настраиваем визуальное отображение лайка
+            if (item.isLiked) {
+                // Если лайкнуто — ставим закрашенную звезду/сердечко и красим в желтый/оранжевый
+                binding.buttonLike.setImageResource(R.drawable.heart_red) // или ваше кастомное закрашенное сердечко
+            } else {
+                // Если лайк убран — ставим пустую иконку и красим в белый
+                binding.buttonLike.setImageResource(R.drawable.heart) // или ваше пустое сердечко
+            }
+
 
             // Состояние кнопки аудио-плеера
             val iconRes = if (item.isPlaying) R.drawable.pause else R.drawable.play
