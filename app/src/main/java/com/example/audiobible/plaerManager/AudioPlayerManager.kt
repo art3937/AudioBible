@@ -59,65 +59,52 @@ class AudioPlayerManager @Inject constructor(
     // Контроллер нужен только для поддержания связи с MediaSessionService (для вывода шторки)
     private var mediaController: MediaController? = null
 
-    // ЕДИНСТВЕННЫЙ И НАСТОЯЩИЙ ПЛЕЕР ДЛЯ ВСЕГО ПРИЛОЖЕНИЯ.
-    // Больше никаких геттеров с переключениями и рассинхронов.
+
     val exoPlayer: ExoPlayer = ExoPlayer.Builder(appContext.applicationContext).build()
 
     init {
+
         // Слушаем состояние НАПРЯМУЮ из физического плеера, а не из контроллера
         exoPlayer.addListener(object : Player.Listener {
             override fun onPlaybackStateChanged(playbackState: Int) {
                 if (playbackState == Player.STATE_ENDED) {
                     stopProgressUpdate()
-                    _progressState.value = _progressState.value.copy(
-                        isPlaying = false,
-                        isTrackCompleted = true,
-                        isStateLoading = exoPlayer.isLoading
-                    )
                 }
-                _progressState.value = _progressState.value.copy(
-                    isStateLoading = playbackState == Player.STATE_BUFFERING,
-                    currentTrackIndex = exoPlayer.currentMediaItemIndex
-                )
-            }
 
-            // Внутри init блока в AudioPlayerManager.kt
-            override fun onIsPlayingChanged(isPlaying: Boolean) {
-                _progressState.value = _progressState.value.copy(isPlaying = isPlaying)
-
-                if (isPlaying) {
-                    // Стартуем сервис только при активной игре
-                    try {
-                        val intent = Intent(appContext, AudioPlaybackService::class.java)
-                        appContext.startService(intent)
-                    } catch (e: Exception) {
-                        Log.e("AudioPlayerManager", "Не удалось запустить сервис: ${e.message}")
-                    }
+                // На всякий случай дублируем проверку и тут
+                if (exoPlayer.isPlaying) {
                     startProgressUpdate()
-                } else {
+                } else if (playbackState == Player.STATE_IDLE || playbackState == Player.STATE_ENDED) {
                     stopProgressUpdate()
-                    // Мягко пинаем сервис, чтобы он проверил состояние и выключился, если на паузе
-                    try {
-                        val intent = Intent(appContext, AudioPlaybackService::class.java)
-                        appContext.startService(intent)
-                    } catch (e: Exception) { /* игнорируем */
-                    }
                 }
             }
 
+
+            // Перехватываем любое изменение состояния Play/Pause (включая шторку и кнопки мини-плеера)
+            override fun onPlayWhenReadyChanged(playWhenReady: Boolean, reason: Int) {
+
+
+                // 🔥 АВТОМАТИЧЕСКИЙ СТАРТ СЕКУНД:
+                if (playWhenReady) {
+                    startProgressUpdate() // Если плеер поехал — включаем таймер секунд
+                } else {
+                    stopProgressUpdate()  // Если встал на паузу — тушим таймер, чтобы не жрать батарею
+                }
+            }
 
             // ПРИНУДИТЕЛЬНЫЙ ПЕРЕХВАТ ПЕРЕКЛЮЧЕНИЯ ТРЕКОВ:
             // Чтобы индекс вьюмодели обновлялся мгновенно, когда шторка или плеер листают главы
             override fun onMediaItemTransition(mediaItem: MediaItem?, reason: Int) {
                 _progressState.value = _progressState.value.copy(
-                    currentTrackIndex = exoPlayer.currentMediaItemIndex
+                    currentTrackIndex = exoPlayer.currentMediaItemIndex,
+                    isPlaying = exoPlayer.isPlaying
                 )
             }
         })
 
         // Подключаем контроллер, чтобы Android знал, что у приложения есть UI-клиент плеера.
         // Это активирует системную интеграцию и шторку.
-        val controllerFuture = MediaController.Builder(appContext, sessionToken).buildAsync()
+        val controllerFuture = MediaController.Builder(appContext,sessionToken).buildAsync()
         controllerFuture.addListener({
             try {
                 mediaController = controllerFuture.get()
@@ -145,6 +132,8 @@ class AudioPlayerManager @Inject constructor(
 
         val current = exoPlayer.currentPosition.toInt()
         val total = if (exoPlayer.duration == C.TIME_UNSET) 0 else exoPlayer.duration.toInt()
+        // 🔥 ДОСТАЕМ РЕАЛЬНОЕ ИМЯ ТЕКУЩЕЙ ГЛАВЫ ИЗ МЕТАДАННЫХ ПЛЕЕРА
+        val currentTrackName = exoPlayer.currentMediaItem?.mediaMetadata?.title?.toString() ?: "Глава"
 
         _progressState.value = _progressState.value.copy(
             current = current,
@@ -152,7 +141,8 @@ class AudioPlayerManager @Inject constructor(
             currentStr = formatTime(current),
             totalStr = formatTime(total),
             isPlaying = exoPlayer.isPlaying,
-            playingBookId = currentPlayingBookId, // ПЕРЕДАЕМ СЮДА
+            playingBookId = currentPlayingBookId,
+            name = currentTrackName, // ПЕРЕДАЕМ СЮДА
             isTrackCompleted = false
         )
         handler.postDelayed(::updateProgressRunnable, 500)
@@ -176,13 +166,15 @@ class AudioPlayerManager @Inject constructor(
 
         // Собираем список MediaItem из списка глав через официальный Uri.Builder
         val mediaItemsList = chapters.map { audioItem ->
+
             val uri = Uri.Builder().scheme(android.content.ContentResolver.SCHEME_ANDROID_RESOURCE)
                 .authority(packageName).path(audioItem.audioRawId.toString()).build()
 
             MediaItem.Builder().setUri(uri).setMediaId(uri.toString()).setMediaMetadata(
-                    MediaMetadata.Builder().setTitle(audioItem.name).setArtist("Аудиобиблия")
-                        .build()
-                ).build()
+                MediaMetadata.Builder().setTitle(audioItem.name).setArtist("Аудиобиблия")
+                    .build()
+            ).build()
+
         }
 
         if (mediaItemsList.isNotEmpty()) {
@@ -196,27 +188,33 @@ class AudioPlayerManager @Inject constructor(
     }
 
     // Подготовка трека из БД без авто-воспроизведения (для отображения последнего сохраненного трека при старте)
-    fun prepareTrackWithoutPlaying(audioRawId: Int, progressMs: Int, chapterName: String = "") {
+    fun prepareTrackWithoutPlaying(chapters: List<AudioItem>,audioRawId: Int, progressMs: Int, chapterName: String ) {
+        val packageName = appContext.packageName
         try {
             val uriString = "android.resource://${appContext.packageName}/$audioRawId"
 
-            val mediaMetadata =
-                MediaMetadata.Builder().setTitle(chapterName.ifEmpty { "AudioBible" })
+            val mediaMetadata = MediaMetadata.Builder().setTitle(chapterName.ifEmpty { "AudioBible" })
                     .setArtist("Аудиобиблия").build()
 
-            val mediaItem = MediaItem.Builder().setUri(Uri.parse(uriString)).setMediaId(uriString)
-                .setMediaMetadata(mediaMetadata).build()
+            val mediaItemsList = chapters.map { audioItem ->
+
+                val uri = Uri.Builder().scheme(android.content.ContentResolver.SCHEME_ANDROID_RESOURCE)
+                    .authority(packageName).path(audioItem.audioRawId.toString()).build()
+
+                MediaItem.Builder().setUri(uri).setMediaId(uri.toString()).setMediaMetadata(
+                    MediaMetadata.Builder().setTitle(audioItem.name).setArtist("Аудиобиблия")
+                        .build()
+                ).build()
+
+            }
 
             exoPlayer.playWhenReady = false
-            exoPlayer.setMediaItem(mediaItem)
+            //exoPlayer.setMediaItem(mediaItem)
+            exoPlayer.setMediaItems(mediaItemsList)
             exoPlayer.prepare()
             exoPlayer.seekTo(progressMs.toLong())
+            exoPlayer.seekTo(audioRawId, progressMs.toLong())
 
-            _progressState.value = PlayerProgressState(
-                isPlaying = false,
-                current = progressMs,
-                currentStr = formatTime(progressMs),
-                name = chapterName.ifEmpty { "Библия — Загрузка..." })
         } catch (e: Exception) {
             e.printStackTrace()
         }
@@ -240,9 +238,6 @@ class AudioPlayerManager @Inject constructor(
         return String.format(Locale.getDefault(), "%02d:%02d", minutes, seconds)
     }
 
-    val duration: Long
-        get() = if (exoPlayer.duration < 0) 0 else exoPlayer.duration
-
     val currentPosition: Long
         get() = exoPlayer.currentPosition
 
@@ -254,14 +249,6 @@ class AudioPlayerManager @Inject constructor(
     fun pause() {
         exoPlayer.pause()
         stopProgressUpdate()
-    }
-
-    fun resume() {
-        exoPlayer.play()
-    }
-
-    fun stop() {
-        exoPlayer.stop()
     }
 
     fun seekTo(positionMs: Int) {
@@ -277,5 +264,14 @@ class AudioPlayerManager @Inject constructor(
             mediaController = null
         }
     }
+
+    fun clearMedia3Playlist() {
+        // Останавливаем проигрывание
+        exoPlayer.stop()
+
+        // 🔥 ОЧИЩАЕМ ВСЮ ГУРЬБУ (плейлист) ИЗ ПАМЯТИ MEDIA3!
+        exoPlayer.clearMediaItems()
+    }
+
 }
 

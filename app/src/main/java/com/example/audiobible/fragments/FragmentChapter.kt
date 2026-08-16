@@ -44,6 +44,10 @@ class FragmentChapter() : Fragment(), AdapterChapters.OnAudioClickListener {
 
     private var isMiniPlayerMinimized = false
 
+    private val nextTrackHandler = android.os.Handler(android.os.Looper.getMainLooper())
+    private var nextTrackRunnable: Runnable? = null
+
+
 
     override fun onCreateView(
         inflater: LayoutInflater,
@@ -79,11 +83,6 @@ class FragmentChapter() : Fragment(), AdapterChapters.OnAudioClickListener {
         // 3. Создаем красивый тестовый список книг
         viewModel.chaptersData.observe(viewLifecycleOwner) { tracks ->
             booksAdapter.submitList(tracks) {
-                val selIndex = tracks.indexOfFirst { it.isSelected }
-                if (selIndex >= 0) {
-                    // notify single item in case DiffUtil somehow missed updating visual state
-                    booksAdapter.notifyItemChanged(selIndex)
-                }
             }
         }
 
@@ -97,10 +96,7 @@ class FragmentChapter() : Fragment(), AdapterChapters.OnAudioClickListener {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
                 viewModel.playerState.collectLatest { state ->
 
-                    // КРИТИЧЕСКАЯ ПРОВЕРКА: Получаем ID книги, которая сейчас открыта на этом экране.
-                    // (Убедитесь, что метод getCurrentBookId() или переменная bookId доступны во ViewModel,
-                    // либо вытащите её напрямую из аргументов фрагмента, например: val currentBookId = arguments?.getInt("BOOK_ID") ?: -1)
-                    val openedBookId = viewModel.getCurrentBookId()
+                     val openedBookId = viewModel.getCurrentBookId()
 
                     // Если плеер заряжен И играет книга именно ЭТОГО экрана — показываем мини-плеер
                     if (state.total > 0 && state.playingBookId == openedBookId ) {
@@ -223,7 +219,8 @@ class FragmentChapter() : Fragment(), AdapterChapters.OnAudioClickListener {
         }
 
         binding.buttonNextTrack.setOnClickListener {
-            viewModel.nextTrack()
+
+                    viewModel.nextTrack()
 
         }
 
@@ -249,12 +246,14 @@ class FragmentChapter() : Fragment(), AdapterChapters.OnAudioClickListener {
     }
 
     override fun onPlayPauseClick(item: AudioItem) {
-        val position = booksAdapter.currentList.indexOf(item)
-        if (position == -1) return
+        // 🔥 Ищем индекс по уникальному ID главы, это сработает со 100% гарантией!
+        val position = booksAdapter.currentList.indexOfFirst { it.id == item.id }
 
-        // Просто отдаем команду во ViewModel, передавая главу и её позицию в адаптере
+
         viewModel.toggleChapter(item, position)
+
     }
+
 
     override fun onLikeClick(item: AudioItem) {
         viewModel.toggleLike(item)
