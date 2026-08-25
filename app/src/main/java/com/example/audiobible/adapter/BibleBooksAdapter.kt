@@ -7,7 +7,7 @@ import androidx.core.graphics.toColorInt
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
-import com.example.audiobible.databinding.CardChapterBinding
+import com.example.audiobible.databinding.CardBookBinding
 import com.example.audiobible.dto.Book
 
 class BibleBooksAdapter(
@@ -15,7 +15,7 @@ class BibleBooksAdapter(
 ) : ListAdapter<Book, BibleBooksAdapter.BookViewHolder>(BookDiffCallback()) {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): BookViewHolder {
-        val binding = CardChapterBinding.inflate(
+        val binding = CardBookBinding.inflate(
             LayoutInflater.from(parent.context),
             parent,
             false
@@ -46,7 +46,7 @@ class BibleBooksAdapter(
     }
 
     inner class BookViewHolder(
-        private val binding: CardChapterBinding
+        private val binding: CardBookBinding
     ) : RecyclerView.ViewHolder(binding.root) {
 
         // Полная сборка карточки при первом появлении

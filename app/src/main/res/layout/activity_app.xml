@@ -4,7 +4,6 @@
     xmlns:tools="http://tools.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:fitsSystemWindows="true"
     tools:context=".fragments.AppActivity">
 
     <!-- Навигационный контейнер на весь экран -->
@@ -20,40 +19,70 @@
         app:layout_constraintTop_toTopOf="parent"
         app:navGraph="@navigation/nav_main" />
 
-    <!-- Парящая стильная кнопка НАЗАД (СТРОГО СЛЕВА) -->
-    <ImageButton
-        android:id="@+id/btnBack"
-        android:layout_width="48dp"
-        android:layout_height="48dp"
-        android:layout_marginStart="16dp"
-        android:layout_marginTop="16dp"
-        android:contentDescription="Вернуться назад"
-        android:background="@drawable/bg_floating_menu"
-        android:foreground="?attr/selectableItemBackgroundBorderless"
-        app:srcCompat="@drawable/abc_ic_ab_back_material"
-        app:tint="#FFFFFF"
-        android:scaleType="centerInside"
-        android:elevation="4dp"
-        android:visibility="gone"
-        app:layout_constraintStart_toStartOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
-
-    <!-- Парящая стильная кнопка МЕНЮ (СТРОГО СПРАВА ПОВЕРХ КОНТЕНТА) -->
-    <ImageButton
-        android:id="@+id/fabMenu"
-        android:layout_width="48dp"
-        android:layout_height="48dp"
-        android:layout_marginEnd="16dp"
-        android:layout_marginTop="16dp"
-        android:contentDescription="Открыть меню"
-        android:background="@drawable/bg_floating_menu"
-        android:foreground="?attr/selectableItemBackgroundBorderless"
-        app:srcCompat="@drawable/abc_ic_menu_overflow_material"
-        app:tint="#FFFFFF"
-        android:scaleType="centerInside"
-        android:elevation="4dp"
+    <!-- Полупрозрачная верхняя панель (исправленная) -->
+    <androidx.constraintlayout.widget.ConstraintLayout
+        android:id="@+id/topBar"
+        android:layout_width="0dp"
+        android:layout_height="64dp"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:background="#CC000000"
+        android:elevation="8dp"
         app:layout_constraintEnd_toEndOf="parent"
-        app:layout_constraintTop_toTopOf="parent" />
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <!-- Кнопка НАЗАД -->
+        <ImageButton
+            android:id="@+id/btnBack"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:contentDescription="Вернуться назад"
+            android:background="@drawable/bg_floating_menu"
+            android:foreground="?attr/selectableItemBackgroundBorderless"
+            app:srcCompat="@drawable/abc_ic_ab_back_material"
+            app:tint="#FFFFFF"
+            android:scaleType="centerInside"
+            android:visibility="gone"
+            app:layout_constraintStart_toStartOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent" /> <!-- ИСПРАВЛЕНО НА constraintBottom_toBottomOf -->
+
+        <!-- Название книги -->
+        <TextView
+            android:id="@+id/tvBookTitle"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:text=""
+            android:textColor="#FFFFFF"
+            android:textSize="18sp"
+            android:textStyle="bold"
+            android:gravity="center"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:layout_marginStart="16dp"
+            android:layout_marginEnd="16dp"
+            app:layout_constraintStart_toEndOf="@id/btnBack"
+            app:layout_constraintEnd_toStartOf="@id/fabMenu"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent" /> <!-- ИСПРАВЛЕНО НА constraintBottom_toBottomOf -->
+
+        <!-- Кнопка МЕНЮ -->
+        <ImageButton
+            android:id="@+id/fabMenu"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:contentDescription="Открыть меню"
+            android:background="@drawable/bg_floating_menu"
+            android:foreground="?attr/selectableItemBackgroundBorderless"
+            app:srcCompat="@drawable/abc_ic_menu_overflow_material"
+            app:tint="#FFFFFF"
+            android:scaleType="centerInside"
+            app:layout_constraintEnd_toEndOf="parent"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent" /> <!-- ИСПРАВЛЕНО НА constraintBottom_toBottomOf -->
+
+    </androidx.constraintlayout.widget.ConstraintLayout>
 
 
 </androidx.constraintlayout.widget.ConstraintLayout>

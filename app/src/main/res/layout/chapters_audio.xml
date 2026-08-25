@@ -38,20 +38,24 @@
             app:layout_constraintTop_toTopOf="@id/buttonPlayPause"
             tools:text="Глава 1" />
 
-        <!-- КНОПКА ЛАЙКА: Изящное сердечко по Material гайдлайнам -->
-        <ImageButton
+
+        <com.airbnb.lottie.LottieAnimationView
             android:id="@+id/buttonLike"
             android:layout_width="40dp"
             android:layout_height="40dp"
             android:layout_marginEnd="4dp"
             android:background="?attr/selectableItemBackgroundBorderless"
             android:contentDescription="Добавить в избранное"
-            android:scaleType="centerInside"
-            app:srcCompat="@drawable/heart"
-            app:tint="#FFFFFF"
+            app:lottie_rawRes="@raw/like"
+            app:lottie_autoPlay="false"
+            app:lottie_loop="false"
             app:layout_constraintBottom_toBottomOf="@id/buttonPlayPause"
             app:layout_constraintEnd_toStartOf="@id/imageViewArrow"
-            app:layout_constraintTop_toTopOf="@id/buttonPlayPause" />
+            app:layout_constraintStart_toEndOf="@id/textViewTitle"
+            app:layout_constraintTop_toTopOf="@id/buttonPlayPause"/>
+
+
+
 
         <!-- ГАЛОЧКА: Иконка стрелочки для раскрытия текста -->
         <ImageView

@@ -7,17 +7,17 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.ImageButton
-import androidx.core.graphics.toColorInt
-import com.example.audiobible.R
 import androidx.recyclerview.widget.DiffUtil
 import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
+import com.example.audiobible.R
 import com.example.audiobible.databinding.ChaptersAudioBinding
 import com.example.audiobible.dto.AudioItem
 import java.io.IOException
 
 class AdapterChapters(
-    private val listener: OnAudioClickListener, private val onChapterClick: (AudioItem) -> Unit
+    private val listener: OnAudioClickListener,
+    private val onChapterClick: (AudioItem) -> Unit
 ) : ListAdapter<AudioItem, AdapterChapters.ChapterViewHolder>(ChapterDiffCallback()) {
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): ChapterViewHolder {
@@ -31,53 +31,113 @@ class AdapterChapters(
         holder.bind(getItem(position), listener, onChapterClick)
     }
 
-    interface OnAudioClickListener {
-        fun onPlayPauseClick(item: AudioItem)
-        fun onLikeClick(item: AudioItem) // НОВЫЙ МЕТОД ДЛЯ ЛАЙКА
+    override fun onBindViewHolder(holder: ChapterViewHolder, position: Int, payloads: List<Any>) {
+        if (payloads.isNotEmpty()) {
+            val set = payloads.first() as? Set<*>
+            if (set != null) {
+                val item = getItem(position)
+
+                if (set.contains("PAYLOAD_PLAY")) {
+                    holder.updatePlayState(item)
+                }
+
+                if (set.contains("PAYLOAD_LIKE")) {
+                    if (!holder.isWaitingForAnimationEnd) {
+                        holder.binding.buttonLike.setMinAndMaxProgress(0f, 1f)
+                        holder.binding.buttonLike.progress = if (item.isLiked) 1f else 0f
+                    }
+                }
+                // Убираем преждевременный return, чтобы ListAdapter мог корректно обработать
+                // остальные системные изменения (включая выделение строк при payload-обновлениях)
+            }
+        }
+        super.onBindViewHolder(holder, position, payloads)
     }
 
+    interface OnAudioClickListener {
+        fun onPlayPauseClick(item: AudioItem)
+        fun onLikeClick(item: AudioItem)
+    }
+
+    // Класс СНОВА ОБЫЧНЫЙ (НЕ inner), что гарантирует стабильную работу itemView и выделения
     class ChapterViewHolder(
-        private val binding: ChaptersAudioBinding
+        val binding: ChaptersAudioBinding
     ) : RecyclerView.ViewHolder(binding.root) {
 
         val playPauseButton: ImageButton = binding.buttonPlayPause
 
+        var isWaitingForAnimationEnd = false
+        private var lastClickTime = 0L
+
+        fun updatePlayState(item: AudioItem) {
+            val iconRes = if (item.isPlaying) R.drawable.pause else R.drawable.play
+            binding.buttonPlayPause.setImageResource(iconRes)
+        }
+
         fun bind(
-            item: AudioItem, listener: OnAudioClickListener, onChapterClick: (AudioItem) -> Unit
+            item: AudioItem, // Сюда всегда прилетает самый свежий item из адаптера
+            listener: OnAudioClickListener,
+            onChapterClick: (AudioItem) -> Unit
         ) {
             binding.textViewTitle.text = item.name
 
+            // --- НАСТРОЙКА LOTTIE ЛАЙКА + ЗАЩИТА ---
+            binding.buttonLike.setOnClickListener(null)
+            binding.buttonLike.removeAllAnimatorListeners()
+
+            if (!isWaitingForAnimationEnd) {
+                binding.buttonLike.setMinAndMaxProgress(0f, 1f)
+                binding.buttonLike.progress = if (item.isLiked) 1f else 0f
+            }
 
             binding.buttonLike.setOnClickListener {
                 val position = bindingAdapterPosition
                 if (position != RecyclerView.NO_POSITION) {
-                    listener.onLikeClick(item) // Передаем клик в листенер!
+
+                    val currentTime = System.currentTimeMillis()
+                    if (currentTime - lastClickTime < 500L) {
+                        return@setOnClickListener
+                    }
+                    lastClickTime = currentTime
+
+                    isWaitingForAnimationEnd = true
+
+                    if (!item.isLiked) {
+                        binding.buttonLike.speed = 0.6f
+                        binding.buttonLike.setMinAndMaxProgress(0f, 1f)
+                        binding.buttonLike.playAnimation()
+                    } else {
+                        binding.buttonLike.speed = -0.6f
+                        binding.buttonLike.setMinAndMaxProgress(0f, 1f)
+                        binding.buttonLike.playAnimation()
+                    }
+
+                    binding.buttonLike.addAnimatorListener(object : android.animation.Animator.AnimatorListener {
+                        override fun onAnimationStart(animation: android.animation.Animator) {}
+                        override fun onAnimationRepeat(animation: android.animation.Animator) {}
+                        override fun onAnimationCancel(animation: android.animation.Animator) {
+                            isWaitingForAnimationEnd = false
+                        }
+                        override fun onAnimationEnd(animation: android.animation.Animator) {
+                            isWaitingForAnimationEnd = false
+                        }
+                    })
+
+                    listener.onLikeClick(item)
                 }
             }
-            // Настраиваем визуальное отображение лайка
-            if (item.isLiked) {
-                // Если лайкнуто — ставим закрашенную звезду/сердечко и красим в желтый/оранжевый
-                binding.buttonLike.setImageResource(R.drawable.heart_red) // или ваше кастомное закрашенное сердечко
-            } else {
-                // Если лайк убран — ставим пустую иконку и красим в белый
-                binding.buttonLike.setImageResource(R.drawable.heart) // или ваше пустое сердечко
-            }
 
+            updatePlayState(item)
 
-            // Состояние кнопки аудио-плеера
-            val iconRes = if (item.isPlaying) R.drawable.pause else R.drawable.play
-            binding.buttonPlayPause.setImageResource(iconRes)
-
-
+            // --- ПОЧИНЕННОЕ ВЫДЕЛЕНИЕ СТРОК ---
             if (item.isSelected) {
                 binding.textViewTitle.setTextColor(Color.YELLOW)
             } else {
                 binding.textViewTitle.setTextColor(Color.WHITE)
             }
-            // ВКЛЮЧАЕМ СЕЛЕКТОР ОБВОДКИ КАРТОЧКИ
-            // Привязываем активацию фона к флагу модели. XML сам нарисует рамку!
+
             binding.root.isActivated = item.isSelected
-            // Клик по кнопке Play/Pause аудиозаписи
+
             playPauseButton.setOnClickListener {
                 val position = bindingAdapterPosition
                 if (position != RecyclerView.NO_POSITION) {
@@ -85,11 +145,9 @@ class AdapterChapters(
                 }
             }
 
-            // Важный сброс видимости текста и угла стрелочки при прокрутке списка
             binding.textViewChapterContent.visibility = View.GONE
             binding.imageViewArrow.rotation = 0f
 
-            // Функция управления раскрытием текста, его покраской и анимацией стрелочки
             fun toggleExpandState() {
                 val isVisible = binding.textViewChapterContent.visibility == View.VISIBLE
 
@@ -99,31 +157,23 @@ class AdapterChapters(
                 } else {
                     val context = itemView.context
                     try {
-                        // 1. Читаем чистый текст из assets
                         val rawText = context.assets.open(item.textPath).bufferedReader()
                             .use { it.readText() }
 
-                        // 2. Создаем SpannableStringBuilder для раскраски отдельных частей текста
                         val spannableBuilder = SpannableStringBuilder(rawText)
-
-                        // Регулярное выражение ищет цифры в начале строк (например: "1.", "12.")
                         val regex = """(?m)^\d+\.""".toRegex()
                         val matchResults = regex.findAll(rawText)
-
-                        // Задаем цвет для номеров стихов (золотисто-оранжевый)
                         val numColor = Color.parseColor("#FF9800")
 
-                        // Пробегаемся по всем найденным цифрам и красим их
                         for (match in matchResults) {
                             spannableBuilder.setSpan(
                                 ForegroundColorSpan(numColor),
                                 match.range.first,
-                                match.range.last + 1, // Захватываем саму цифру и точку после неё
+                                match.range.last + 1,
                                 android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE
                             )
                         }
 
-                        // 3. Сетим красивый текст в TextView
                         binding.textViewChapterContent.text = spannableBuilder
                         binding.textViewChapterContent.visibility = View.VISIBLE
                         binding.imageViewArrow.animate().rotation(180f).setDuration(200).start()
@@ -136,11 +186,9 @@ class AdapterChapters(
                 }
             }
 
-            // Нажатие на название главы ИЛИ на саму галочку гарантированно открывает текст
             binding.textViewTitle.setOnClickListener { toggleExpandState() }
             binding.imageViewArrow.setOnClickListener { toggleExpandState() }
 
-            // Клик по всей карточке элемента списка
             binding.root.setOnClickListener {
                 val position = bindingAdapterPosition
                 if (position != RecyclerView.NO_POSITION) {
@@ -157,6 +205,13 @@ class AdapterChapters(
 
         override fun areContentsTheSame(oldItem: AudioItem, newItem: AudioItem): Boolean {
             return oldItem == newItem
+        }
+
+        override fun getChangePayload(oldItem: AudioItem, newItem: AudioItem): Any? {
+            val payloads = mutableSetOf<String>()
+            if (oldItem.isLiked != newItem.isLiked) payloads.add("PAYLOAD_LIKE")
+            if (oldItem.isPlaying != newItem.isPlaying) payloads.add("PAYLOAD_PLAY")
+            return if (payloads.isNotEmpty()) payloads else super.getChangePayload(oldItem, newItem)
         }
     }
 }

@@ -81,4 +81,6 @@ dependencies {
 
     implementation("androidx.media3:media3-session:1.10.1")
     // media compat для NotificationCompat.MediaStyle и MediaSessionCompat.Token
+    implementation("com.airbnb.android:lottie:6.0.0")
+
 }

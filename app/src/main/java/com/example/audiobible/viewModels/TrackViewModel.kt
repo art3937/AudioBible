@@ -22,6 +22,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import androidx.media3.session.MediaSession
 import com.example.audiobible.bd.FavoriteChapterEntity
+import com.example.audiobible.repository.BibleRepository
 import kotlinx.coroutines.Job
 import javax.inject.Inject
 
@@ -31,6 +32,7 @@ class TrackViewModel @Inject constructor(
     private val playerManager: AudioPlayerManager,
     private val repository: ChaptersRepository,
     private val bibleDao: BibleDao, // ИНЖЕКТИРУЕМ DAO ЧЕРЕЗ HILT (ViewModel управляет БД)
+    private val repositoryChapter: BibleRepository,
     @ApplicationContext private val context: Context
 ) : ViewModel() {
 
@@ -66,7 +68,6 @@ class TrackViewModel @Inject constructor(
                 lastIsCompleted = nowCompleted
             }
         }
-
 
 
 
@@ -106,6 +107,11 @@ class TrackViewModel @Inject constructor(
         }
     }
 
+
+
+    fun getBookName(id: Int): String{
+        return repositoryChapter.getBookNameById(id)
+    }
     fun syncLikeStatus(chapterId: Int, isLiked: Boolean) {
         _chaptersData.value = _chaptersData.value?.map {
             if (it.id == chapterId) it.copy(isLiked = isLiked) else it
@@ -456,41 +462,42 @@ class TrackViewModel @Inject constructor(
 
         val updatedChapter = chapter.copy(isLiked = newLikeState)
 
-        // 1. Обновляем UI основного списка глав
+        // 1. Обновляем UI основного списка глав (делаем это ОДИН раз)
         _chaptersData.value = _chaptersData.value?.map {
             if (it.id == chapter.id) updatedChapter else it
         }
-        // 2. Запись в НОВУЮ отдельную таблицу избранного
+
+        // 2. Запись в отдельную таблицу избранного
         viewModelScope.launch(Dispatchers.IO) {
             try {
                 if (newLikeState) {
-                    // Вычисляем ID книги прямо из ID главы: например, 2001 / 1000 = 2 (Исход), 1001 / 1000 = 1 (Бытие)
                     val calculatedBookId = chapter.id / 1000
-
                     val favoriteEntity = FavoriteChapterEntity(
                         id = chapter.id,
                         name = chapter.name,
-                        bookId = calculatedBookId, // Теперь книга всегда определена правильно и не зависит от переменных!
+                        bookId = calculatedBookId,
                         textPath = chapter.textPath
                     )
                     bibleDao.insertFavorite(favoriteEntity)
-
-                    Log.d("TRACK_VM_LIKE", "Успешно СОХРАНЕНО в таблицу favorite_chapters: ${chapter.name}")
+                    Log.d("TRACK_VM_LIKE", "Успешно СОХРАНЕНО в избранное: ${chapter.name}")
                 } else {
-                    // Если дизлайкнули — удаляем из favorite_chapters
                     bibleDao.deleteFavorite(chapter.id)
-                    Log.d("TRACK_VM_LIKE", "Успешно УДАЛЕНО из таблицы favorite_chapters: ${chapter.name}")
+                    Log.d("TRACK_VM_LIKE", "Успешно УДАЛЕНО из избранного: ${chapter.name}")
                 }
             } catch (e: Exception) {
-                Log.e("TRACK_VM_LIKE", "Ошибка при работе с БД в toggleLike: ${e.message}", e)
+                Log.e("TRACK_VM_LIKE", "Ошибка при работе с БД: ${e.message}", e)
             }
         }
 
-        // Старая логика сохранения позиции (если она вам по-прежнему нужна для истории)
-        _chaptersData.value?.find { it.id == chapter.id }?.let {
-            saveCurrentPlaybackPosition(it)
-        }
-    }fun clearPlayer() {
+        // 3. ИСПРАВЛЕНО: Если вам действительно нужно сохранить позицию при лайке,
+        // используйте исходный или точечно обновленный объект, НЕ вызывая повторный map/поиск в LiveData.
+        // Если сохранение позиции при лайке не нужно — просто удалите эти строчки.
+        saveCurrentPlaybackPosition(updatedChapter)
+    }
+
+
+
+    fun clearPlayer() {
         // 1. Очищаем плейлист и тушим сам движок Media3
         playerManager.clearMedia3Playlist()
 

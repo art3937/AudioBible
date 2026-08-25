@@ -74,6 +74,10 @@ class FragmentChapter() : Fragment(), AdapterChapters.OnAudioClickListener {
         val idOfBook = arguments?.getInt("ARG_BOOK_ID") ?: 1
         viewModel.loadChapters(idOfBook)
 //viewModel.loadChapters(arguments?.bookId ?: 0)
+        // 2. Стучимся в Активити и отдаем название в шапку
+        val bookName = viewModel.getBookName(idOfBook)
+        (activity as? AppActivity)?.updateTopBarTitle(bookName)
+
 
         binding.recyclerViewChapter.apply {
             layoutManager = LinearLayoutManager(requireContext())
@@ -283,7 +287,10 @@ class FragmentChapter() : Fragment(), AdapterChapters.OnAudioClickListener {
         isMiniPlayerMinimized = true
     }
 
-
-
+    override fun onDestroyView() {
+        super.onDestroyView()
+        // Стучимся в Активити и полностью очищаем текст в шапке
+        (activity as? AppActivity)?.updateTopBarTitle("")
+    }
 
 }

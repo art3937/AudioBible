@@ -30,6 +30,7 @@ import kotlinx.coroutines.flow.onEach
 class FeedFragment : Fragment() {
 
 
+
     private var _binding: FragmentFeedBinding? = null
     private val binding get() = _binding!!
 

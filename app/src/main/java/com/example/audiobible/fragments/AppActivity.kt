@@ -1,7 +1,6 @@
-package com.example.audiobible.fragments
+package com.example.audiobible.fragments // Убедитесь, что этот пакет совпадает с вашим
 
 import android.Manifest
-import android.content.Intent
 import android.content.pm.PackageManager
 import android.graphics.Color
 import android.graphics.Typeface
@@ -12,11 +11,18 @@ import android.text.Spanned
 import android.text.style.ForegroundColorSpan
 import android.text.style.StyleSpan
 import android.util.Log
-import android.view.ContextThemeWrapper
 import android.view.View
+import android.view.ViewGroup
+import android.widget.TextView
+import androidx.activity.OnBackPressedCallback
 import androidx.activity.viewModels
 import androidx.appcompat.app.AppCompatActivity
+import androidx.appcompat.view.ContextThemeWrapper
 import androidx.appcompat.widget.PopupMenu
+import androidx.core.view.ViewCompat
+import androidx.core.view.WindowCompat
+import androidx.core.view.WindowInsetsCompat
+import androidx.core.view.updateLayoutParams
 import androidx.navigation.fragment.NavHostFragment
 import com.example.audiobible.R
 import com.example.audiobible.databinding.ActivityAppBinding
@@ -27,14 +33,44 @@ import ru.netology.mediapleer2.TrackViewModel
 class AppActivity : AppCompatActivity() {
 
     private val viewModel: TrackViewModel by viewModels()
+    private lateinit var binding: ActivityAppBinding
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
 
-        val binding = ActivityAppBinding.inflate(layoutInflater)
+        // 1. Включаем Edge-to-Edge: разрешаем контенту (книге) затекать под StatusBar
+        WindowCompat.setDecorFitsSystemWindows(window, false)
+        window.statusBarColor = Color.TRANSPARENT
+
+        binding = ActivityAppBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
-        // Получаем навигационный контроллер по вашему ID nav_main
+        // Слушаем размеры системных окон (включая StatusBar)
+        ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, windowInsets ->
+            val statusBarHeight = windowInsets.getInsets(WindowInsetsCompat.Type.statusBars()).top
+
+            // 1. Сдвигаем саму панель вниз ровно на высоту StatusBar, чтобы она не перекрывала часы
+            binding.topBar.updateLayoutParams<ViewGroup.MarginLayoutParams> {
+                topMargin = statusBarHeight
+            }
+
+            // 2. Вычисляем общий отступ для контента: StatusBar + Высота вашей панели (64dp)
+            val density = resources.displayMetrics.density
+            val customBarHeight = (64 * density).toInt()
+            val totalTopPadding = statusBarHeight + customBarHeight
+
+            // 3. Передаем этот отступ в контейнер, чтобы тулбар больше ничего не закрывал!
+            binding.navMain.setPadding(0, totalTopPadding, 0, 0)
+
+            windowInsets
+        }
+
+        WindowCompat.getInsetsController(window, window.decorView).apply {
+            // true — делает иконки в StatusBar ТЕМНЫМИ (чтобы их было видно поверх светлой книги)
+            isAppearanceLightStatusBars = true
+        }
+
+        // Получаем навигационный контроллер по ID nav_main
         val navController =
             (supportFragmentManager.findFragmentById(binding.navMain.id) as NavHostFragment).navController
 
@@ -42,41 +78,35 @@ class AppActivity : AppCompatActivity() {
 
         // Функция безопасного выхода назад с остановкой плеера
         fun handleBackNavigation() {
-            // Если мы находимся на экране плеера глав (fragmentChapter2)
-            // перед выходом принудительно ставим воспроизведение на паузу
             if (navController.currentDestination?.id == R.id.fragmentChapter2) {
                 Log.d("AppActivity", "==> Выходим из главы: ставим плеер на паузу")
                 viewModel.pauseTrack() // Вызываем метод паузы нашей ViewModel!
             }
-            // Выполняем физический шаг назад в навигации фрагментов
             navController.navigateUp()
         }
 
-        // 1. КЛИК ПО ПАРЯЩЕЙ СТРЕЛОЧКЕ НАЗАД (наша кнопка в углу)
+        // 1. КЛИК ПО ПАРЯЩЕЙ СТРЕЛОЧКЕ НАЗАД ВНУТРИ ПАНЕЛИ
         binding.btnBack.setOnClickListener {
             handleBackNavigation()
         }
 
-
+        // КЛИК ПО КНОПКЕ МЕНЮ ВНУТРИ ПАНЕЛИ
         binding.fabMenu.setOnClickListener { view ->
-            // Передаем саму кнопку (view) в качестве якоря и наш navController
             showFloatingMenu(view, navController)
         }
+
         // 2. СИСТЕМНАЯ КНОПКА НАЗАД (жест телефона или треугольник внизу экрана)
-        // Регистрируем коллбэк для перехвата стандартного системного Android-назад
-        onBackPressedDispatcher.addCallback(this, object : androidx.activity.OnBackPressedCallback(true) {
+        onBackPressedDispatcher.addCallback(this, object : OnBackPressedCallback(true) {
             override fun handleOnBackPressed() {
-                // Если есть куда возвращаться внутри приложения — идем назад по нашей логике с паузой
                 if (navController.previousBackStackEntry != null) {
                     handleBackNavigation()
                 } else {
-                    // Если мы на самом первом экране — закрываем приложение полностью
                     finish()
                 }
             }
         })
 
-        // 3. СЛУШАТЕЛЬ НАВИГАЦИИ (управляет видимостью парящей стрелочки)
+        // 3. СЛУШАТЕЛЬ НАВИГАЦИИ (управляет видимостью стрелочки "Назад" внутри панели)
         navController.addOnDestinationChangedListener { _, _, _ ->
             if (navController.previousBackStackEntry != null) {
                 binding.btnBack.visibility = View.VISIBLE
@@ -85,30 +115,37 @@ class AppActivity : AppCompatActivity() {
             }
         }
 
-
         // Восстановление последнего трека из БД при холодном старте
         if (savedInstanceState == null) {
             viewModel.restoreLastGlobalTrack()
         }
     }
 
+    /**
+     * Метод для динамической установки названия книги по центру шапки.
+     * Фрагменты могут вызывать этот метод через (activity as? AppActivity)?.updateTopBarTitle("...")
+     */
+    fun updateTopBarTitle(title: String?) {
+        if (title.isNullOrEmpty()) {
+            binding.tvBookTitle.text = ""
+        } else {
+            binding.tvBookTitle.text = title
+        }
+    }
+
     // Метод создания и отображения стилизованного парящего меню
     private fun showFloatingMenu(anchorView: View, navController: androidx.navigation.NavController) {
-        // Оборачиваем контекст в нашу тему для PopupMenu из themes.xml
         val contextWrapper = ContextThemeWrapper(this, R.style.Theme_AudioBible_PopupWrapper)
         val popup = PopupMenu(contextWrapper, anchorView)
 
-        // Накатываем ваш существующий файл разметки меню
         popup.menuInflater.inflate(R.menu.auth_menu, popup.menu)
 
-        // ЖЕЛЕЗОБЕТОННАЯ ПРОГРАММНАЯ ПОКРАСКА ТЕКСТА МЕНЮ (чтобы ничего не сливалось)
         val menu = popup.menu
         for (i in 0 until menu.size()) {
             val menuItem = menu.getItem(i)
             val rawTitle = menuItem.title.toString()
             val spannableTitle = SpannableString(rawTitle)
 
-            // Красим текст в ярко-белый цвет
             spannableTitle.setSpan(
                 ForegroundColorSpan(Color.WHITE),
                 0,
@@ -116,7 +153,6 @@ class AppActivity : AppCompatActivity() {
                 Spanned.SPAN_INCLUSIVE_INCLUSIVE
             )
 
-            // Делаем текст жирным для максимальной контрастности на полупрозрачном фоне
             spannableTitle.setSpan(
                 StyleSpan(Typeface.BOLD),
                 0,
@@ -127,17 +163,13 @@ class AppActivity : AppCompatActivity() {
             menuItem.title = spannableTitle
         }
 
-        // Обработка нажатий на пункты меню
-        // Внутри метода showFloatingMenu в AppActivity.kt
         popup.setOnMenuItemClickListener { menuItem ->
             when (menuItem.itemId) {
                 R.id.signin -> true
 
-                // ОБРАБОТКА КЛИКА ПО НАШЕМУ НОВОМУ ПУНКТУ
                 R.id.favorites -> {
                     Log.d("AppActivity", "==> Переход на фрагмент избранных глав")
-
-                 navController.navigate(R.id.favoriteFragment)
+                    navController.navigate(R.id.favoriteFragment)
                     true
                 }
 
@@ -159,6 +191,4 @@ class AppActivity : AppCompatActivity() {
         if (checkSelfPermission(permission) == PackageManager.PERMISSION_GRANTED) return
         requestPermissions(arrayOf(permission), 1)
     }
-
-
 }

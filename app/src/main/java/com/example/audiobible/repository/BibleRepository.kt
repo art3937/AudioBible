@@ -7,7 +7,7 @@ import javax.inject.Singleton
 
 @Singleton
 class BibleRepository @Inject constructor() {
-
+val currentBooks = getTestBooks()
     fun getTestBooks(): List<Book> {
         return listOf(
             // ==========================================
@@ -105,5 +105,9 @@ class BibleRepository @Inject constructor() {
             // Пророческая книга (Антрацитовый темный)
             Book(id = 66, name = "Откровение святого Иоанна Богослова (Апокалипсис)", folderName = "revelation", totalChapters = 22, backgroundColor = "#1A202C")
         )
+    }
+
+    fun getBookNameById(bookId: Int): String {
+        return currentBooks.find { it.id == bookId }?.name ?: "Аудиобиблия"
     }
 }
