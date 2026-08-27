@@ -250,9 +250,8 @@ class TrackViewModel @Inject constructor(
                         playerManager.setPlayingBookId(currentBookId)
                         // Prepare track without playing
                         playerManager.prepareTrackWithoutPlaying(
-
                             chapters,
-                            currentPlayingPosition,
+                            "${repositoryChapter.getFolderBookNameById(currentBookId)}/$currentPlayingPosition.mp3",
                             lastHistory.playbackPositionMs.toInt(),
                             targetTrack.name
                         )

@@ -110,4 +110,8 @@ val currentBooks = getTestBooks()
     fun getBookNameById(bookId: Int): String {
         return currentBooks.find { it.id == bookId }?.name ?: "Аудиобиблия"
     }
+
+    fun getFolderBookNameById(bookId: Int): String {
+        return currentBooks.find { it.id == bookId }?.folderName ?: "genesis"
+    }
 }

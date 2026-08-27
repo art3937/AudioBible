@@ -165,32 +165,26 @@ class ChaptersRepository @Inject constructor() {
         // Получаем имя папки книги из префикса (просто отрезаем знак подчеркивания)
         val folderName = filePrefix.removeSuffix("_")
 
-        // 3. СБОРКА И ПРОВЕРКА РЕСУРСОВ RAW И ПУТЕЙ ASSETS
+        // 3. СБОРКА ОБЪЕКТОВ С СУПЕР-ЧИСТЫМИ ПУТЯМИ ASSETS
         return (1..chaptersCount).map { chapterNumber ->
-            val fileName = "$filePrefix$chapterNumber"
 
-            val resId = context.resources.getIdentifier(
-                fileName,
-                "raw",
-                context.packageName
-            )
+            // Собираем путь к аудио: "genesis/1.mp3", "exodus/12.mp3" и т.д.
+            val audioPath = "$folderName/$chapterNumber.mp3"
 
-            val finalAudioId = if (resId != 0) resId else R.raw.genesis_1
-
-            // Автоматически собираем путь вида: "bible_data/genesis/1.txt"
+            // Собираем путь к тексту: "bible_data/genesis/1.txt"
             val textPath = "bible_data/$folderName/$chapterNumber.txt"
 
             AudioItem(
                 id = (bookId * 1000) + chapterNumber,
                 name = "Глава $chapterNumber",
-                audioRawId = finalAudioId,
+                audioPath = audioPath, // 🔥 Теперь это легальная строка!
                 textPath = textPath,
                 isPlaying = false
             )
         }
     }
 
-    /**
+        /**
      * Вспомогательный метод для чтения текста главы прямо из сохраненного пути
      * Пример использования в плеере: val text = chaptersRepository.loadChapterText(context, audioItem.textPath)
      */
@@ -203,3 +197,4 @@ class ChaptersRepository @Inject constructor() {
         }
     }
 }
+

@@ -1,8 +1,6 @@
 package com.example.audiobible.plaerManager
 
-import android.content.ContentResolver
 import android.content.Context
-import android.content.Intent
 import android.net.Uri
 import android.os.Handler
 import android.os.Looper
@@ -155,32 +153,30 @@ class AudioPlayerManager @Inject constructor(
         startPositionMs: Long = 0L,
         bookId: Int = 0
     ) {
-        Log.d(
-            "AudioPlayerManager",
-            "==> Запуск плейлиста кучей. Всего глав: ${chapters.size}, индекс: $currentTrackIndex"
-        )
+        Log.d("AudioPlayerManager", "==> Запуск плейлиста из assets. Всего глав: ${chapters.size}, индекс: $currentTrackIndex")
 
         currentPlayingBookId = bookId
 
-        val packageName = appContext.packageName
+        exoPlayer.stop()
+        exoPlayer.clearMediaItems()
 
-        // Собираем список MediaItem из списка глав через официальный Uri.Builder
         val mediaItemsList = chapters.map { audioItem ->
+            // Просто подставляем готовую строку пути (например: "asset:///genesis/12.mp3")
+            val uri = Uri.parse("asset:///${audioItem.audioPath}")
 
-            val uri = Uri.Builder().scheme(android.content.ContentResolver.SCHEME_ANDROID_RESOURCE)
-                .authority(packageName).path(audioItem.audioRawId.toString()).build()
-
-            MediaItem.Builder().setUri(uri).setMediaId(uri.toString()).setMediaMetadata(
-                MediaMetadata.Builder().setTitle(audioItem.name).setArtist("Аудиобиблия")
-                    .build()
-            ).build()
-
+            MediaItem.Builder()
+                .setUri(uri)
+                .setMediaId(uri.toString())
+                .setMediaMetadata(
+                    MediaMetadata.Builder()
+                        .setTitle(audioItem.name)
+                        .setArtist("Аудиобиблия")
+                        .build()
+                ).build()
         }
 
         if (mediaItemsList.isNotEmpty()) {
-            // Загружаем весь список в единый плеер
             exoPlayer.setMediaItems(mediaItemsList)
-            // Переходим к выбранному пользователем треку в списке
             exoPlayer.seekTo(currentTrackIndex, startPositionMs)
             exoPlayer.prepare()
             exoPlayer.play()
@@ -188,37 +184,42 @@ class AudioPlayerManager @Inject constructor(
     }
 
     // Подготовка трека из БД без авто-воспроизведения (для отображения последнего сохраненного трека при старте)
-    fun prepareTrackWithoutPlaying(chapters: List<AudioItem>,audioRawId: Int, progressMs: Int, chapterName: String ) {
-        val packageName = appContext.packageName
+    fun prepareTrackWithoutPlaying(
+        chapters: List<AudioItem>,
+        targetAudioPath: String, // Сюда из БД / ViewModel передается строка сохраненного пути
+        progressMs: Int,
+        chapterName: String
+    ) {
         try {
-            val uriString = "android.resource://${appContext.packageName}/$audioRawId"
-
-            val mediaMetadata = MediaMetadata.Builder().setTitle(chapterName.ifEmpty { "AudioBible" })
-                    .setArtist("Аудиобиблия").build()
+            // Ищем порядковый индекс трека в плейлисте (чётко сравниваем String со String)
+            val savedTrackIndex = chapters.indexOfFirst { it.audioPath == targetAudioPath }.coerceAtLeast(0)
 
             val mediaItemsList = chapters.map { audioItem ->
+                val uri = Uri.parse("asset:///${audioItem.audioPath}")
 
-                val uri = Uri.Builder().scheme(android.content.ContentResolver.SCHEME_ANDROID_RESOURCE)
-                    .authority(packageName).path(audioItem.audioRawId.toString()).build()
-
-                MediaItem.Builder().setUri(uri).setMediaId(uri.toString()).setMediaMetadata(
-                    MediaMetadata.Builder().setTitle(audioItem.name).setArtist("Аудиобиблия")
-                        .build()
-                ).build()
-
+                MediaItem.Builder()
+                    .setUri(uri)
+                    .setMediaId(uri.toString())
+                    .setMediaMetadata(
+                        MediaMetadata.Builder()
+                            .setTitle(audioItem.name)
+                            .setArtist("Аудиобиблия")
+                            .build()
+                    ).build()
             }
 
             exoPlayer.playWhenReady = false
-            //exoPlayer.setMediaItem(mediaItem)
             exoPlayer.setMediaItems(mediaItemsList)
             exoPlayer.prepare()
-            exoPlayer.seekTo(progressMs.toLong())
-            exoPlayer.seekTo(audioRawId, progressMs.toLong())
+
+            // Перематываем на правильный порядковый номер в списке
+            exoPlayer.seekTo(savedTrackIndex, progressMs.toLong())
 
         } catch (e: Exception) {
             e.printStackTrace()
         }
     }
+
 
     val isPlaying: Boolean
         get() = exoPlayer.isPlaying
