@@ -210,7 +210,7 @@ class FavoriteFragment : Fragment() {
         }
 
         binding.buttonNextTrack.setOnClickListener {
-            trackViewModel.nextTrackForFavorite()
+            trackViewModel.nextTrack()
         }
 
         // 10. МЕХАНИЗМ ПЕРЕОПРЕДЕЛЕНИЯ КНОПКИ НАЗАД + ПАУЗА И ВЫХОД ИЗ ФРАГМЕНТА
