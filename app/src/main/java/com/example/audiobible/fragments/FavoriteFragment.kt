@@ -19,9 +19,9 @@ import com.example.audiobible.R
 import com.example.audiobible.adapter.AdapterChapters
 import com.example.audiobible.dto.AudioItem
 import dagger.hilt.android.AndroidEntryPoint
-import ru.netology.mediapleer2.TrackViewModel
-import com.example.audiobible.viewmodel.FavoriteViewModel
 import com.example.audiobible.databinding.FragmentFavoriteBinding
+import com.example.audiobible.viewModels.FavoriteViewModel
+import com.example.audiobible.viewModels.TrackViewModel
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
 
@@ -29,7 +29,7 @@ import kotlinx.coroutines.launch
 class FavoriteFragment : Fragment() {
 
     private val trackViewModel: TrackViewModel by activityViewModels()
-    private val favoriteViewModel: FavoriteViewModel by viewModels()
+
 
     private var _binding: FragmentFavoriteBinding? = null
     private val binding get() = _binding!!
@@ -57,52 +57,65 @@ class FavoriteFragment : Fragment() {
             binding.layoutMiniPlayer.pivotY = binding.layoutMiniPlayer.height.toFloat()
         }
 
-        // 1. Инициализируем адаптер списков
-        val favoriteAdapter = AdapterChapters(
+        // 2. Первоначальный разовый запрос данных при старте
+        val initialTrackId = trackViewModel.getCurrentPosition()
+        val isPlaying = trackViewModel.isPlaying
+        val initialBookId = trackViewModel.getCurrentBookId()
+       // favoriteViewModel.loadAllFavorites(initialTrackId, isPlaying, initialBookId)
+
+        trackViewModel.loadChapters(0,true)
+
+        // Инициализируем её. Теперь внутри лямбды favoriteAdapter доступен на 100%!
+       val favoriteAdapter = AdapterChapters(
             object : AdapterChapters.OnAudioClickListener {
-                override fun onPlayPauseClick(item: AudioItem) {
-                    trackViewModel.toggleChapter(item, 0)
+                override fun onPlayPauseClick(item: AudioItem,position: Int) {
+                    trackViewModel.toggleChapter(
+                        chapter = item,true,
+                        positionAdapter = position
+                    )
                 }
 
                 override fun onLikeClick(item: AudioItem) {
-                    favoriteViewModel.removeCardFromFavorites(item.id)
                     trackViewModel.syncLikeStatus(item.id, isLiked = false)
                 }
             },
             onChapterClick = { item -> }
         )
 
+
+
         binding.recyclerViewFavorites.layoutManager = LinearLayoutManager(requireContext())
         binding.recyclerViewFavorites.adapter = favoriteAdapter
 
-        // 2. Первоначальный разовый запрос данных при старте
-        val initialTrackId = trackViewModel.getCurrentPosition()
-        val isPlaying = trackViewModel.isPlaying
-        val initialBookId = trackViewModel.getCurrentBookId()
-        favoriteViewModel.loadAllFavorites(initialTrackId, isPlaying, initialBookId)
 
         // 3. Подписка на список избранного из базы данных
-        favoriteViewModel.favoriteChaptersData.observe(viewLifecycleOwner) { favorites ->
+        trackViewModel.chaptersData.observe(viewLifecycleOwner) { favorites ->
             favoriteAdapter.submitList(favorites)
         }
 
         // 4. ПОДПИСКА НА СОСТОЯНИЕ ПЛЕЕРА И УПРАВЛЕНИЕ МИНИ-ПЛЕЕРОМ
         viewLifecycleOwner.lifecycleScope.launch {
             viewLifecycleOwner.repeatOnLifecycle(Lifecycle.State.STARTED) {
+                // Внутри FavoriteFragment.kt -> в блоке collectLatest
                 trackViewModel.playerState.collectLatest { state ->
-                    val currentTrackId = trackViewModel.getCurrentPosition()
-                    val isPlayingNow = state.isPlaying
-                    val playingBookId = trackViewModel.getCurrentBookId()
 
-                    // Обновляем кнопки и подсветку внутри самого списка RecyclerView
-                    favoriteViewModel.loadAllFavorites(currentTrackId, isPlayingNow, playingBookId)
+                    // 1. Восстанавливаем путь к файлу, который СЕЙЧАС реально играет в плеере
+                    // Если индекс плеера валидный (>= 0), собираем строку пути, которую поймет FavoriteViewModel
+                    val playingAudioPath = if (state.currentTrackIndex >= 0) {
+                        val dbBookId = state.playingBookId
+                        val dbChapterNumber = state.currentTrackIndex + 1
 
-                    // Если плеер заряжен — всегда показываем мини-плеер в Избранном (без привязки к конкретной книге!)
+                        // Здесь мы подставляем точное имя папки, как в твоей БД!
+                        // Если в БД пути "exodus/2.mp3", то нам нужен маппер папок (exodus, genesis).
+                        // Если это сложно, можно использовать глобальный ID:
+                        (dbBookId * 1000) + dbChapterNumber
+                    } else {
+                        -1
+                    }
                     if (state.total > 0) {
                         binding.layoutMiniPlayer.isVisible = true
                         binding.textMiniPlayerTitle.text = state.name
                         binding.seekBarMiniPlayer.max = state.total
-
                         if (!isUserTrackingSeekBar) {
                             binding.seekBarMiniPlayer.progress = state.current
                             binding.textCurrentTime.text = state.currentStr
@@ -115,6 +128,7 @@ class FavoriteFragment : Fragment() {
                     val iconRes = if (state.isPlaying) R.drawable.pause else R.drawable.play
                     binding.buttonMiniPlayerPlayPause.setImageResource(iconRes)
                 }
+
             }
         }
 
@@ -196,7 +210,7 @@ class FavoriteFragment : Fragment() {
         }
 
         binding.buttonNextTrack.setOnClickListener {
-            trackViewModel.nextTrack()
+            trackViewModel.nextTrackForFavorite()
         }
 
         // 10. МЕХАНИЗМ ПЕРЕОПРЕДЕЛЕНИЯ КНОПКИ НАЗАД + ПАУЗА И ВЫХОД ИЗ ФРАГМЕНТА
@@ -212,8 +226,18 @@ class FavoriteFragment : Fragment() {
         )
     }
 
+
+
+    // Внутри FavoriteFragment.kt
+
     override fun onDestroyView() {
         super.onDestroyView()
-        _binding = null
+
+        // 🔥 ОЧИЩАЕМ ПЛЕЕР ПРИ ВЫХОДЕ:
+        // Сбрасываем кастомный плейлист "лайков", чтобы он не ломал логику обычных книг
+        trackViewModel.clearPlayer()
+
+        _binding = null // Защита от утечек памяти (Memory Leaks)
     }
+
 }

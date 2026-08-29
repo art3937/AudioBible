@@ -21,7 +21,6 @@ import com.example.audiobible.adapter.AdapterChapters
 import com.example.audiobible.databinding.FragmentNewChapterBinding
 import com.example.audiobible.dto.AudioItem
 import dagger.hilt.android.AndroidEntryPoint
-import ru.netology.mediapleer2.TrackViewModel
 import android.app.PendingIntent
 import android.content.Intent
 import android.content.Context
@@ -31,6 +30,7 @@ import androidx.compose.remote.creation.compose.action.Action
 import androidx.core.app.NotificationCompat
 import androidx.core.view.isVisible
 import com.example.audiobible.plaerManager.PlayerProgressState
+import com.example.audiobible.viewModels.TrackViewModel
 
 @AndroidEntryPoint
 class FragmentChapter() : Fragment(), AdapterChapters.OnAudioClickListener {
@@ -89,6 +89,7 @@ class FragmentChapter() : Fragment(), AdapterChapters.OnAudioClickListener {
             booksAdapter.submitList(tracks) {
             }
         }
+
 
         binding.layoutMiniPlayer.post {
             binding.layoutMiniPlayer.pivotX = binding.layoutMiniPlayer.width / 2f
@@ -249,13 +250,8 @@ class FragmentChapter() : Fragment(), AdapterChapters.OnAudioClickListener {
 
     }
 
-    override fun onPlayPauseClick(item: AudioItem) {
-        // 🔥 Ищем индекс по уникальному ID главы, это сработает со 100% гарантией!
-        val position = booksAdapter.currentList.indexOfFirst { it.id == item.id }
-
-
-        viewModel.toggleChapter(item, position)
-
+    override fun onPlayPauseClick(item: AudioItem,position: Int) {
+        viewModel.toggleChapter(item)
     }
 
 

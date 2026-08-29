@@ -55,7 +55,7 @@ class AdapterChapters(
     }
 
     interface OnAudioClickListener {
-        fun onPlayPauseClick(item: AudioItem)
+        fun onPlayPauseClick(item: AudioItem,position: Int)
         fun onLikeClick(item: AudioItem)
     }
 
@@ -141,7 +141,7 @@ class AdapterChapters(
             playPauseButton.setOnClickListener {
                 val position = bindingAdapterPosition
                 if (position != RecyclerView.NO_POSITION) {
-                    listener.onPlayPauseClick(item)
+                    listener.onPlayPauseClick(item,position)
                 }
             }
 

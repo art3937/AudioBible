@@ -1,4 +1,4 @@
-﻿package com.example.audiobible.viewmodels
+﻿package com.example.audiobible.viewModels
 
 import android.util.Log
 import androidx.lifecycle.LiveData

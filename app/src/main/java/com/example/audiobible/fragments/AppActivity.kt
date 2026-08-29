@@ -26,8 +26,8 @@ import androidx.core.view.updateLayoutParams
 import androidx.navigation.fragment.NavHostFragment
 import com.example.audiobible.R
 import com.example.audiobible.databinding.ActivityAppBinding
+import com.example.audiobible.viewModels.TrackViewModel
 import dagger.hilt.android.AndroidEntryPoint
-import ru.netology.mediapleer2.TrackViewModel
 
 @AndroidEntryPoint
 class AppActivity : AppCompatActivity() {

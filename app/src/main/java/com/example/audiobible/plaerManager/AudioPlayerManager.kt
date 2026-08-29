@@ -37,7 +37,8 @@ data class PlayerProgressState(
     val currentTrackIndex: Int = 0,
     // НОВОЕ ПОЛЕ: ID книги, которая РЕАЛЬНО сейчас играет
     val playingBookId: Int = -1,
-    val hasNext: Boolean = false // Нужен для логики блокировки шторки
+    val hasNext: Boolean = false, // Нужен для логики блокировки шторки
+    val currentTrackId: Int = -1
 )
 
 
@@ -132,7 +133,7 @@ class AudioPlayerManager @Inject constructor(
         val total = if (exoPlayer.duration == C.TIME_UNSET) 0 else exoPlayer.duration.toInt()
         // 🔥 ДОСТАЕМ РЕАЛЬНОЕ ИМЯ ТЕКУЩЕЙ ГЛАВЫ ИЗ МЕТАДАННЫХ ПЛЕЕРА
         val currentTrackName = exoPlayer.currentMediaItem?.mediaMetadata?.title?.toString() ?: "Глава"
-
+        val currentTrackGlobalId = exoPlayer.currentMediaItem?.mediaId?.toIntOrNull() ?: -1
         _progressState.value = _progressState.value.copy(
             current = current,
             total = total,
@@ -140,7 +141,8 @@ class AudioPlayerManager @Inject constructor(
             totalStr = formatTime(total),
             isPlaying = exoPlayer.isPlaying,
             playingBookId = currentPlayingBookId,
-            name = currentTrackName, // ПЕРЕДАЕМ СЮДА
+            name = currentTrackName,
+            currentTrackId = currentTrackGlobalId, // 👈 Передаем чистый глобальный
             isTrackCompleted = false
         )
         handler.postDelayed(::updateProgressRunnable, 500)
