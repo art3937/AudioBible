@@ -2,10 +2,10 @@
 <menu xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://android.com">
 
-    <!-- Ваши существующие пункты меню (signin, signup, logout) -->
-    <item
-        android:id="@+id/signin"
-        android:title="Войти" />
+<!--    &lt;!&ndash; Ваши существующие пункты меню (signin, signup, logout) &ndash;&gt;-->
+<!--    <item-->
+<!--        android:id="@+id/signin"-->
+<!--        android:title="Войти" />-->
 
     <!-- НАШ НОВЫЙ ПУНКТ ДЛЯ ЛАЙКНУТЫХ ГЛАВ -->
     <item
@@ -13,9 +13,9 @@
         android:title="Избранные главы"
     android:icon="@android:drawable/btn_star_big_on" />
 
-    <item
-        android:id="@+id/signup"
-        android:title="Регистрация" />
+<!--    <item-->
+<!--        android:id="@+id/signup"-->
+<!--        android:title="Регистрация" />-->
 
 
 </menu>

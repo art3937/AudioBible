@@ -75,7 +75,7 @@ class FeedFragment : Fragment() {
                     }
                 )
         }
-
+        (activity as? AppActivity)?.updateTopBarTitle("Аудио Библия")
         // 2. Настраиваем RecyclerView
         binding.recyclerViewBooks.apply {
             layoutManager = LinearLayoutManager(requireContext())

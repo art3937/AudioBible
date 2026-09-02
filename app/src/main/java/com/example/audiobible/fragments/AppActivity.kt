@@ -127,7 +127,7 @@ class AppActivity : AppCompatActivity() {
      */
     fun updateTopBarTitle(title: String?) {
         if (title.isNullOrEmpty()) {
-            binding.tvBookTitle.text = ""
+            binding.tvBookTitle.text = "Аудио Библия"
         } else {
             binding.tvBookTitle.text = title
         }
@@ -165,7 +165,7 @@ class AppActivity : AppCompatActivity() {
 
         popup.setOnMenuItemClickListener { menuItem ->
             when (menuItem.itemId) {
-                R.id.signin -> true
+//                R.id.signin -> true
 
                 R.id.favorites -> {
                     Log.d("AppActivity", "==> Переход на фрагмент избранных глав")
@@ -173,10 +173,10 @@ class AppActivity : AppCompatActivity() {
                     true
                 }
 
-                R.id.signup -> {
-                    navController.navigate(R.id.action_feedFragment_to_fragmentChapter2)
-                    true
-                }
+//                R.id.signup -> {
+//                    navController.navigate(R.id.action_feedFragment_to_fragmentChapter2)
+//                    true
+//                }
 
                 else -> false
             }

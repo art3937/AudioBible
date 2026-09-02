@@ -199,6 +199,29 @@ class FragmentChapter() : Fragment(), AdapterChapters.OnAudioClickListener {
             }
         })
 
+        binding.recyclerViewChapter.addOnScrollListener(object : androidx.recyclerview.widget.RecyclerView.OnScrollListener() {
+            override fun onScrolled(recyclerView: androidx.recyclerview.widget.RecyclerView, dx: Int, dy: Int) {
+                super.onScrolled(recyclerView, dx, dy)
+
+                // Проверяем, упёрся ли пользователь в самый низ списка
+                val isAtBottom = !recyclerView.canScrollVertically(1)
+
+                if (isAtBottom) {
+                    // Поднимаем плеер на 80 пикселей вверх
+                    binding.layoutMiniPlayer.animate()
+                        .translationY(-80f)
+                        .setDuration(200)
+                        .start()
+                } else {
+                    // Возвращаем плеер на место к нижнему краю
+                    binding.layoutMiniPlayer.animate()
+                        .translationY(0f)
+                        .setDuration(200)
+                        .start()
+                }
+            }
+        })
+
         // Кнопки перемотки 15 секунд
         binding.buttonMiniPlayerRewind.setOnClickListener {
             viewModel.rewind15Seconds()

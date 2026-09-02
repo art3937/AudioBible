@@ -120,6 +120,16 @@ class AudioPlayerManager @Inject constructor(
 
     private var currentPlayingBookId: Int = -1
 
+    // Проверяет, существует ли ассет в папке assets
+    private fun assetExists(path: String): Boolean {
+        return try {
+            appContext.assets.open(path).close()
+            true
+        } catch (e: Exception) {
+            false
+        }
+    }
+
     fun setPlayingBookId(bookId: Int) {
         currentPlayingBookId = bookId
         _progressState.value = _progressState.value.copy(playingBookId = bookId)
@@ -162,20 +172,50 @@ class AudioPlayerManager @Inject constructor(
         exoPlayer.stop()
         exoPlayer.clearMediaItems()
 
-        val mediaItemsList = chapters.map { audioItem ->
+        val mediaItemsList = chapters.mapNotNull { audioItem ->
             // Просто подставляем готовую строку пути (например: "asset:///genesis/12.mp3")
-            val uri = Uri.parse("asset:///${audioItem.audioPath}")
+            if (!assetExists(audioItem.audioPath)) {
+                Log.w("AudioPlayerManager", "==> Пропущен отсутствующий asset: ${audioItem.audioPath}")
+                null
+            } else {
+                val uri = Uri.parse("asset:///${audioItem.audioPath}")
 
-            MediaItem.Builder()
+                MediaItem.Builder()
+                    .setUri(uri)
+                    .setMediaId(uri.toString())
+                    .setMediaMetadata(
+                        MediaMetadata.Builder()
+                            .setTitle(audioItem.name)
+                            .setArtist("Аудиобиблия")
+                            .build()
+                    ).build()
+            }
+        }
+
+        if (mediaItemsList.isEmpty()) {
+            Log.w("AudioPlayerManager", "==> Все треки отсутствуют, делаем fallback на genesis/1.mp3")
+            val uri = Uri.parse("asset:///genesis/1.mp3")
+            val mediaItem = MediaItem.Builder()
                 .setUri(uri)
                 .setMediaId(uri.toString())
                 .setMediaMetadata(
                     MediaMetadata.Builder()
-                        .setTitle(audioItem.name)
+                        .setTitle("Genesis 1")
                         .setArtist("Аудиобиблия")
                         .build()
                 ).build()
+            exoPlayer.setMediaItem(mediaItem)
+            exoPlayer.seekTo(0, 0)
+            exoPlayer.prepare()
+            exoPlayer.play()
+            return
         }
+
+        val safeIndex = currentTrackIndex.coerceIn(0, mediaItemsList.lastIndex)
+        exoPlayer.setMediaItems(mediaItemsList)
+        exoPlayer.seekTo(safeIndex, startPositionMs)
+        exoPlayer.prepare()
+        exoPlayer.play()
 
         if (mediaItemsList.isNotEmpty()) {
             exoPlayer.setMediaItems(mediaItemsList)
@@ -194,21 +234,57 @@ class AudioPlayerManager @Inject constructor(
     ) {
         try {
             // Ищем порядковый индекс трека в плейлисте (чётко сравниваем String со String)
-            val savedTrackIndex = chapters.indexOfFirst { it.audioPath == targetAudioPath }.coerceAtLeast(0)
+            //val savedTrackIndex = chapters.indexOfFirst { it.audioPath == targetAudioPath }.coerceAtLeast(0)
+            val mediaItemsList = chapters.mapNotNull { audioItem ->
+                if (!assetExists(audioItem.audioPath)) {
+                    Log.w("AudioPlayerManager", "==> Пропущен отсутствующий asset: ${audioItem.audioPath}")
+                    null
+                } else {
+                    val uri = Uri.parse("asset:///${audioItem.audioPath}")
 
-            val mediaItemsList = chapters.map { audioItem ->
-                val uri = Uri.parse("asset:///${audioItem.audioPath}")
+                    MediaItem.Builder()
+                        .setUri(uri)
+                        .setMediaId(uri.toString())
+                        .setMediaMetadata(
+                            MediaMetadata.Builder()
+                                .setTitle(audioItem.name)
+                                .setArtist("Аудиобиблия")
+                                .build()
+                        ).build()
+                }
+            }
 
-                MediaItem.Builder()
+            if (mediaItemsList.isEmpty()) {
+                Log.w("AudioPlayerManager", "==> Нет доступных треков, подставляем genesis/1.mp3")
+                val uri = Uri.parse("asset:///genesis/1.mp3")
+                val mediaItem = MediaItem.Builder()
                     .setUri(uri)
                     .setMediaId(uri.toString())
                     .setMediaMetadata(
                         MediaMetadata.Builder()
-                            .setTitle(audioItem.name)
+                            .setTitle("Genesis 1")
                             .setArtist("Аудиобиблия")
                             .build()
                     ).build()
+                exoPlayer.playWhenReady = false
+                exoPlayer.setMediaItem(mediaItem)
+                exoPlayer.prepare()
+                exoPlayer.seekTo(0, progressMs.toLong())
+                return
             }
+
+            // Найдём индекс сохранённого трека в получившемся списке (если он там есть)
+            val savedTrackIndex = chapters.indexOfFirst { it.audioPath == targetAudioPath }
+            val finalSavedIndex = if (savedTrackIndex != -1) {
+                mediaItemsList.indexOfFirst { it.mediaId == "asset:///" + targetAudioPath }.coerceAtLeast(0)
+            } else 0
+
+            exoPlayer.playWhenReady = false
+            exoPlayer.setMediaItems(mediaItemsList)
+            exoPlayer.prepare()
+
+            // Перематываем на правильный порядковый номер в списке
+            exoPlayer.seekTo(finalSavedIndex, progressMs.toLong())
 
             exoPlayer.playWhenReady = false
             exoPlayer.setMediaItems(mediaItemsList)

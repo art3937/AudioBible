@@ -1,16 +1,16 @@
-package com.example.audiobible // Проверь свой пакет приложения
+package com.example.audiobible // Твой пакет приложения
 
 import org.junit.Test
 import java.io.File
 import java.io.FileOutputStream
 import java.util.zip.ZipInputStream
+import kotlin.math.min
 
 class AdbAutoloadTest {
 
     @Test
     fun autoPullUnzipAndCleanAllBooks() {
         // === НАСТРОЙКИ СВЯЗИ ===
-        val deviceIp = "192.168.0.193:5555"
         val downloadDirOnPhone = "/sdcard/Download"
 
         // Автоматически находим путь к официальному ADB в системе Windows
@@ -31,7 +31,7 @@ class AdbAutoloadTest {
 
         println("ℹ️ Используем ADB по пути: $adbPath")
 
-        // 1. ТВОЯ КАНOHИЧЕСКАЯ КАРТА КНИГ (ID -> Имя папки в assets)
+        // 1. ТВОЯ КАНОНИЧЕСКАЯ КАРТА КНИГ (Строго по твоему скриншоту папок в assets)
         val bookFoldersMap = mapOf(
             1 to "genesis",       2 to "exodus",       3 to "leviticus",
             4 to "numbers",       5 to "deuteronomy",  6 to "joshua",
@@ -48,44 +48,68 @@ class AdbAutoloadTest {
             37 to "haggai",       38 to "zechariah",   39 to "malachi"
         )
 
-        println("🔍 Сканируем папку Download на смартфоне...")
+        // Проверяем, какие вообще устройства сейчас видит ADB
+        println("🔍 Проверяем активные подключения...")
+        val devicesProcess = ProcessBuilder(adbPath, "devices")
+            .redirectErrorStream(true)
+            .start()
+        val activeDevices = devicesProcess.inputStream.bufferedReader().readLines()
+        devicesProcess.waitFor()
 
-        val lsProcess = ProcessBuilder(adbPath, "-s", deviceIp, "shell", "ls", downloadDirOnPhone)
+        println("📱 Статус подключений в системе:")
+        activeDevices.forEach { println("   $it") }
+
+        println("🔍 Сканируем папку $downloadDirOnPhone на активном смартфоне...")
+
+        val lsProcess = ProcessBuilder(adbPath, "shell", "ls", downloadDirOnPhone)
             .redirectErrorStream(true)
             .start()
 
         val phoneFiles = lsProcess.inputStream.bufferedReader().readLines()
         lsProcess.waitFor()
 
-        val targetArchives = phoneFiles.filter { fileName ->
-            fileName.startsWith("8_") && fileName.endsWith(".zip")
-        }
+        println("\n📁 [ОТЛАДКА] Найдено файлов в папке на телефоне: ${phoneFiles.size}")
+
+        // Фильтруем только ZIP-архивы, которые начинаются на 8_ (твои книги)
+        val targetArchives = phoneFiles
+            .map { it.trim() }
+            .filter { it.startsWith("8_") && it.endsWith(".zip", ignoreCase = true) && it.isNotEmpty() }
 
         if (targetArchives.isEmpty()) {
-            println("\n☕ На телефоне пока нет новых архивов вида 8_X.zip для скачивания.")
+            println("\n☕ В папке Загрузки на телефоне нет подходящих ZIP-архивов книг (8_X.zip).")
             return
         }
 
-        println("📚 Найдено новых архивов для обработки: ${targetArchives.size}\n")
+        println("\n📚 Найдено ZIP-архивов книг для обработки: ${targetArchives.size}\n")
 
         for (archiveName in targetArchives) {
+            // Четко вытаскиваем числовой ID из маски файла
             val bookIdString = archiveName.substringAfter("8_").substringBefore(".zip")
             val bookId = bookIdString.toIntOrNull()
 
+            // Если ID некорректный или его нет в нашей карте — пропускаем
             if (bookId == null || !bookFoldersMap.containsKey(bookId)) {
-                println("⚠️ Пропущен файл $archiveName: неверный ID книги.")
                 continue
             }
 
             val targetFolderName = bookFoldersMap[bookId]!!
-            val remoteZipPath = "$downloadDirOnPhone/$archiveName"
             val localZipFile = File("src/main/assets/temp_download.zip")
             val assetsOutputDir = File("src/main/assets/$targetFolderName")
 
-            println("======== 📦 ОБРАБОТКА: Книга ID $bookId -> assets/$targetFolderName ========")
-            println("📥 Шаг 1: Скачиваем $archiveName через ADB...")
+            // 🔥 УМНАЯ ПРОВЕРКА НА ДУБЛИКАТЫ (Смотрит в твои английские папки)
+            if (assetsOutputDir.exists() && assetsOutputDir.isDirectory) {
+                val existingFiles = assetsOutputDir.listFiles { _, name -> name.endsWith(".mp3", ignoreCase = true) }
+                if (existingFiles != null && existingFiles.isNotEmpty()) {
+                    println("⏩ [ПРОПУСК] Книга '$archiveName' -> assets/$targetFolderName уже полностью заполнена (${existingFiles.size} треков).")
+                    println("==================================================================\n")
+                    continue
+                }
+            }
 
-            val pullProcess = ProcessBuilder(adbPath, "-s", deviceIp, "pull", remoteZipPath, localZipFile.absolutePath)
+            println("======== 📦 ОБРАБОТКА: Книга ID $bookId -> assets/$targetFolderName ========")
+            println("📥 Шаг 1: Скачиваем архив через ADB...")
+
+            val pullProcess = ProcessBuilder(adbPath, "pull", "$downloadDirOnPhone/$archiveName", localZipFile.absolutePath)
                 .redirectErrorStream(true)
                 .start()
             pullProcess.inputStream.bufferedReader().use { println(it.readText().trim()) }
@@ -127,8 +151,7 @@ class AdbAutoloadTest {
                 println("🗑️ Временный zip-файл на компьютере успешно удален.")
             }
 
-            // 🔥 СТРОКА С УДАЛЕНИЕМ С ТЕЛЕФОНА (adb shell rm) ПОЛНОСТЬЮ ВЫРЕЗАНА!
-            println("📱 Оригинальный архив $archiveName оставлен на смартфоне.")
+            println("📱 Оригинальный архив оставлен на смартфоне.")
             println("==================================================================\n")
         }
 
