@@ -9,6 +9,11 @@ import androidx.recyclerview.widget.ListAdapter
 import androidx.recyclerview.widget.RecyclerView
 import com.example.audiobible.databinding.CardBookBinding
 import com.example.audiobible.dto.Book
+import android.view.View
+import com.example.audiobible.generatorAll.ImageGenerator
+import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 
 class BibleBooksAdapter(
     private val onBookClick: (Book) -> Unit
@@ -55,6 +60,36 @@ class BibleBooksAdapter(
 
             // Напрямую связываем визуальное состояние с полем модели данных
             updateSelectionState(book)
+
+            // Сбрасываем изображение по умолчанию
+            binding.imageViewCover.setImageDrawable(null)
+            binding.imageViewCover.visibility = View.GONE
+
+            // Покрасим фон карточки пока нет изображения
+            try {
+                binding.layoutBackground.setBackgroundColor(book.backgroundColor.toColorInt())
+            } catch (e: Exception) {
+                // ignore
+            }
+
+            // Генерируем фон для всех карточек (если нет в кэше, с локальной блокировкой)
+            CoroutineScope(Dispatchers.Main).launch {
+                try {
+                    val bmp = ImageGenerator.generateImage(binding.root.context, book.name)
+                    if (bmp != null) {
+                        binding.imageViewCover.setImageBitmap(bmp)
+                        binding.imageViewCover.visibility = View.VISIBLE
+                        binding.overlayView.visibility = View.VISIBLE
+                    } else {
+                        binding.imageViewCover.visibility = View.GONE
+                        binding.overlayView.visibility = View.GONE
+                    }
+                } catch (e: Exception) {
+                    // не критично — оставляем пустое изображение
+                    binding.imageViewCover.visibility = View.GONE
+                    binding.overlayView.visibility = View.GONE
+                }
+            }
 
             // Клик по всей карточке для перехода на фрагмент с главами
             binding.root.setOnClickListener {

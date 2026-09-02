@@ -82,12 +82,56 @@ class FeedFragment : Fragment() {
             adapter = booksAdapter
         }
 
+        // Add scroll listener to scale centered item
+        binding.recyclerViewBooks.addOnScrollListener(object : androidx.recyclerview.widget.RecyclerView.OnScrollListener() {
+            override fun onScrolled(recyclerView: androidx.recyclerview.widget.RecyclerView, dx: Int, dy: Int) {
+                super.onScrolled(recyclerView, dx, dy)
+                applyScaleToChildren()
+            }
+
+            override fun onScrollStateChanged(recyclerView: androidx.recyclerview.widget.RecyclerView, newState: Int) {
+                super.onScrollStateChanged(recyclerView, newState)
+                // ensure final state when scrolling stops
+                if (newState == androidx.recyclerview.widget.RecyclerView.SCROLL_STATE_IDLE) {
+                    applyScaleToChildren()
+                }
+            }
+        })
+
         // 3. ОБЫЧНЫЙ ОБСЕРВЕР ДЛЯ ОБНОВЛЕНИЯ АДАПТЕРА
         // Работает при старте, при кликах и при возвращении на этот экран
         viewModel.booksLiveData.observe(viewLifecycleOwner) { books ->
             booksAdapter.submitList(books)
+            // apply scaling after list is submitted and layout happens
+            binding.recyclerViewBooks.post { applyScaleToChildren() }
         }
     }
 
+    // Scale children based on distance to RecyclerView center
+    private fun applyScaleToChildren() {
+        val recycler = binding.recyclerViewBooks
+        if (recycler.childCount == 0) return
+        val centerY = recycler.height / 2f
+        val maxDistance = recycler.height / 2f
+        val maxScale = 1.08f
+        val minScale = 0.96f
+
+        for (i in 0 until recycler.childCount) {
+            val child = recycler.getChildAt(i) ?: continue
+            val childCenterY = (child.top + child.bottom) / 2f
+            val distance = kotlin.math.abs(childCenterY - centerY)
+            val factor = (distance / maxDistance).coerceIn(0f, 1f)
+            val scale = maxScale - (maxScale - minScale) * factor
+
+            // animate scale smoothly
+            child.pivotX = (child.width / 2).toFloat()
+            child.pivotY = (child.height / 2).toFloat()
+            child.scaleX = scale
+            child.scaleY = scale
+
+            // optional elevation change to emphasize center
+            child.elevation = if (factor < 0.25f) 12f else 4f
+        }
+    }
 
 }
