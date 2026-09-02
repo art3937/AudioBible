@@ -42,6 +42,21 @@ object ImageGenerator {
         return digest.joinToString("") { "%02x".format(it) }
     }
 
+    // Return cached image if exists without performing generation
+    fun getCachedImage(context: android.content.Context, finalPrompt: String): Bitmap? {
+        try {
+            val cacheDir = File(context.cacheDir, "image_cache")
+            val filename = sha256(finalPrompt) + ".png"
+            val cacheFile = File(cacheDir, filename)
+            if (cacheFile.exists() && cacheFile.length() > 0) {
+                return BitmapFactory.decodeFile(cacheFile.absolutePath)
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "[IMAGE] getCachedImage error: ${e.localizedMessage}")
+        }
+        return null
+    }
+
     // Simple map of Mutexes to avoid duplicate concurrent generation for same prompt
     private val mutexMap = mutableMapOf<String, kotlinx.coroutines.sync.Mutex>()
 

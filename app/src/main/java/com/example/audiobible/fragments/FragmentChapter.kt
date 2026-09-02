@@ -84,9 +84,45 @@ class FragmentChapter() : Fragment(), AdapterChapters.OnAudioClickListener {
             adapter = booksAdapter
         }
 
+        // Add scroll listener to scale centered item (and keep mini-player behavior)
+        binding.recyclerViewChapter.addOnScrollListener(object : androidx.recyclerview.widget.RecyclerView.OnScrollListener() {
+            override fun onScrolled(recyclerView: androidx.recyclerview.widget.RecyclerView, dx: Int, dy: Int) {
+                super.onScrolled(recyclerView, dx, dy)
+
+                // Scale visible children based on center
+                applyScaleToChildren()
+
+                // Проверяем, упёрся ли пользователь в самый низ списка
+                val isAtBottom = !recyclerView.canScrollVertically(1)
+
+                if (isAtBottom) {
+                    // Поднимаем плеер на 80 пикселей вверх
+                    binding.layoutMiniPlayer.animate()
+                        .translationY(-80f)
+                        .setDuration(200)
+                        .start()
+                } else {
+                    // Возвращаем плеер на место к нижнему краю
+                    binding.layoutMiniPlayer.animate()
+                        .translationY(0f)
+                        .setDuration(200)
+                        .start()
+                }
+            }
+
+            override fun onScrollStateChanged(recyclerView: androidx.recyclerview.widget.RecyclerView, newState: Int) {
+                super.onScrollStateChanged(recyclerView, newState)
+                if (newState == androidx.recyclerview.widget.RecyclerView.SCROLL_STATE_IDLE) {
+                    applyScaleToChildren()
+                }
+            }
+        })
+
         // 3. Создаем красивый тестовый список книг
         viewModel.chaptersData.observe(viewLifecycleOwner) { tracks ->
             booksAdapter.submitList(tracks) {
+                // ensure scaling is applied after layout
+                binding.recyclerViewChapter.post { applyScaleToChildren() }
             }
         }
 
@@ -304,6 +340,33 @@ class FragmentChapter() : Fragment(), AdapterChapters.OnAudioClickListener {
             .setDuration(300)
             .start()
         isMiniPlayerMinimized = true
+    }
+
+    // Scale children based on distance to RecyclerView center (same behavior as books list)
+    private fun applyScaleToChildren() {
+        val recycler = binding.recyclerViewChapter
+        if (recycler.childCount == 0) return
+        val centerY = recycler.height / 2f
+        val maxDistance = recycler.height / 2f
+        val maxScale = 1.08f
+        val minScale = 0.96f
+
+        for (i in 0 until recycler.childCount) {
+            val child = recycler.getChildAt(i) ?: continue
+            val childCenterY = (child.top + child.bottom) / 2f
+            val distance = kotlin.math.abs(childCenterY - centerY)
+            val factor = (distance / maxDistance).coerceIn(0f, 1f)
+            val scale = maxScale - (maxScale - minScale) * factor
+
+            // apply scale
+            child.pivotX = (child.width / 2).toFloat()
+            child.pivotY = (child.height / 2).toFloat()
+            child.scaleX = scale
+            child.scaleY = scale
+
+            // elevation accent
+            child.elevation = if (factor < 0.25f) 12f else 4f
+        }
     }
 
     override fun onDestroyView() {

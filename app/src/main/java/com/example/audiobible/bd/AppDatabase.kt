@@ -17,7 +17,7 @@ import com.example.audiobible.bd.FavoriteChapterEntity // Импортируем
         BookState::class,
         FavoriteChapterEntity::class // 1. ДОБАВИЛИ новую таблицу избранного
     ],
-    version = 3, // 2. УВЕЛИЧИЛИ версию с 2 до 3 для сброса старого кэша БД
+    version = 4, // bumped to 4 after BookState schema change (generateImages field)
     exportSchema = false
 )
 @TypeConverters(Converters::class)

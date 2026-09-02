@@ -49,6 +49,9 @@ interface BibleDao {
     @Query("SELECT * FROM books_state LIMIT 1")
     suspend fun getBookState(): BookState?
 
+    @Query("SELECT * FROM books_state WHERE bookId = :bookId LIMIT 1")
+    suspend fun getBookStateForBook(bookId: Int): BookState?
+
     @Query("DELETE FROM books_state WHERE bookId = :bookId")
     suspend fun deleteBookState(bookId: Int): Int
 

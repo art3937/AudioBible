@@ -18,5 +18,6 @@ data class BookState(
     val name: String,
     val backgroundColor: String? = null,
     val selectedChapter: Int = 1,
-    val chapters: List<Chapter> = emptyList()
+    val chapters: List<Chapter> = emptyList(),
+    val generateImages: Boolean = true
 )

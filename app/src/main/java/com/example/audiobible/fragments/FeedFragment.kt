@@ -29,8 +29,6 @@ import kotlinx.coroutines.flow.onEach
 
 class FeedFragment : Fragment() {
 
-
-
     private var _binding: FragmentFeedBinding? = null
     private val binding get() = _binding!!
 
@@ -53,6 +51,7 @@ class FeedFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+
 
         // 1. Инициализируем адаптер (код клика остается прежним)
         booksAdapter = BibleBooksAdapter { clickedBook ->
@@ -106,6 +105,7 @@ class FeedFragment : Fragment() {
             binding.recyclerViewBooks.post { applyScaleToChildren() }
         }
     }
+
 
     // Scale children based on distance to RecyclerView center
     private fun applyScaleToChildren() {

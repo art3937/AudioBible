@@ -14,6 +14,7 @@ import com.example.audiobible.generatorAll.ImageGenerator
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 class BibleBooksAdapter(
     private val onBookClick: (Book) -> Unit
@@ -72,22 +73,54 @@ class BibleBooksAdapter(
                 // ignore
             }
 
-            // Генерируем фон для всех карточек (если нет в кэше, с локальной блокировкой)
-            CoroutineScope(Dispatchers.Main).launch {
-                try {
-                    val bmp = ImageGenerator.generateImage(binding.root.context, book.name)
-                    if (bmp != null) {
-                        binding.imageViewCover.setImageBitmap(bmp)
-                        binding.imageViewCover.visibility = View.VISIBLE
-                        binding.overlayView.visibility = View.VISIBLE
-                    } else {
+            // Check preferences: per-book override or global flag
+            val prefs = binding.root.context.getSharedPreferences("app_prefs", android.content.Context.MODE_PRIVATE)
+            val globalEnabled = prefs.getBoolean("generate_images_enabled", true)
+            val perBookKey = "book_${book.id}_generate_images"
+            val perBookEnabled = prefs.contains(perBookKey) && prefs.getBoolean(perBookKey, true)
+            val shouldGenerate = if (prefs.contains(perBookKey)) perBookEnabled else globalEnabled
+
+            if (!shouldGenerate) {
+                // Do not initiate network/generation. However, if cached image exists — show it.
+                CoroutineScope(Dispatchers.IO).launch {
+                    try {
+                        val cached = ImageGenerator.getCachedImage(binding.root.context, book.name)
+                        withContext(Dispatchers.Main) {
+                            if (cached != null) {
+                                binding.imageViewCover.setImageBitmap(cached)
+                                binding.imageViewCover.visibility = View.VISIBLE
+                                binding.overlayView.visibility = View.VISIBLE
+                            } else {
+                                binding.imageViewCover.setImageDrawable(null)
+                                binding.imageViewCover.visibility = View.GONE
+                                binding.overlayView.visibility = View.GONE
+                            }
+                        }
+                    } catch (e: Exception) {
+                        withContext(Dispatchers.Main) {
+                            binding.imageViewCover.visibility = View.GONE
+                            binding.overlayView.visibility = View.GONE
+                        }
+                    }
+                }
+            } else {
+                // Генерируем фон для всех карточек (если нет в кэше, с локальной блокировкой)
+                CoroutineScope(Dispatchers.Main).launch {
+                    try {
+                        val bmp = ImageGenerator.generateImage(binding.root.context, book.name)
+                        if (bmp != null) {
+                            binding.imageViewCover.setImageBitmap(bmp)
+                            binding.imageViewCover.visibility = View.VISIBLE
+                            binding.overlayView.visibility = View.VISIBLE
+                        } else {
+                            binding.imageViewCover.visibility = View.GONE
+                            binding.overlayView.visibility = View.GONE
+                        }
+                    } catch (e: Exception) {
+                        // не критично — оставляем пустое изображение
                         binding.imageViewCover.visibility = View.GONE
                         binding.overlayView.visibility = View.GONE
                     }
-                } catch (e: Exception) {
-                    // не критично — оставляем пустое изображение
-                    binding.imageViewCover.visibility = View.GONE
-                    binding.overlayView.visibility = View.GONE
                 }
             }
 

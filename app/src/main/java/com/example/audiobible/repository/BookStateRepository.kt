@@ -12,6 +12,8 @@ class BookStateRepository @Inject constructor(private val dao: BibleDao) {
 
     suspend fun getBookState(): BookState? = dao.getBookState()
 
+    suspend fun getBookState(bookId: Int): BookState? = dao.getBookStateForBook(bookId)
+
     suspend fun save(bookState: BookState) = dao.insertBookState(bookState)
 
     suspend fun delete(bookId: Int) = dao.deleteBookState(bookId)

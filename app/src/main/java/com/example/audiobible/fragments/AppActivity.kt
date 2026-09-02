@@ -28,11 +28,17 @@ import com.example.audiobible.R
 import com.example.audiobible.databinding.ActivityAppBinding
 import com.example.audiobible.viewModels.TrackViewModel
 import dagger.hilt.android.AndroidEntryPoint
+import androidx.lifecycle.lifecycleScope
+import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
 class AppActivity : AppCompatActivity() {
 
     private val viewModel: TrackViewModel by viewModels()
+    @javax.inject.Inject
+    lateinit var bookStateRepository: com.example.audiobible.repository.BookStateRepository
+    private val bookViewModel: com.example.audiobible.viewModels.BookViewModel by viewModels()
+
     private lateinit var binding: ActivityAppBinding
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -163,6 +169,17 @@ class AppActivity : AppCompatActivity() {
             menuItem.title = spannableTitle
         }
 
+        // Add checkbox item for image generation
+        val prefs = getSharedPreferences("app_prefs", MODE_PRIVATE)
+        val enabled = prefs.getBoolean("generate_images_enabled", true)
+        val toggleItem = menu.add(0, com.example.audiobible.R.id.action_toggle_images, 0, "Генерировать картинки")
+        toggleItem.isCheckable = true
+        toggleItem.isChecked = enabled
+        val spannableToggle = SpannableString(toggleItem.title.toString())
+        spannableToggle.setSpan(ForegroundColorSpan(Color.WHITE), 0, spannableToggle.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
+        spannableToggle.setSpan(StyleSpan(Typeface.BOLD), 0, spannableToggle.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
+        toggleItem.title = spannableToggle
+
         popup.setOnMenuItemClickListener { menuItem ->
             when (menuItem.itemId) {
 //                R.id.signin -> true
@@ -170,6 +187,38 @@ class AppActivity : AppCompatActivity() {
                 R.id.favorites -> {
                     Log.d("AppActivity", "==> Переход на фрагмент избранных глав")
                     navController.navigate(R.id.favoriteFragment)
+                    true
+                }
+
+                com.example.audiobible.R.id.action_toggle_images -> {
+                    val currently = prefs.getBoolean("generate_images_enabled", true)
+                    val next = !currently
+                    prefs.edit().putBoolean("generate_images_enabled", next).apply()
+
+                    // save per-book state in DB and prefs
+                    val books = bookViewModel.getBooks()
+                    lifecycleScope.launch {
+                        for (b in books) {
+                            val bs = com.example.audiobible.bd.BookState(
+                                bookId = b.id,
+                                name = b.name,
+                                backgroundColor = b.backgroundColor,
+                                selectedChapter = 1,
+                                generateImages = next
+                            )
+                            bookStateRepository.save(bs)
+                        }
+                    }
+
+                    // save per-book prefs for adapter shortcut
+                    val editor = prefs.edit()
+                    for (b in books) {
+                        editor.putBoolean("book_${b.id}_generate_images", next)
+                    }
+                    editor.apply()
+
+                    // visually update the checkbox
+                    menuItem.isChecked = next
                     true
                 }
 
