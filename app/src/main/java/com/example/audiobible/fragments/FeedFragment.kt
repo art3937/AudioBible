@@ -54,26 +54,29 @@ class FeedFragment : Fragment() {
 
 
         // 1. Инициализируем адаптер (код клика остается прежним)
-        booksAdapter = BibleBooksAdapter { clickedBook ->
-            Toast.makeText(
-                requireContext(),
-                "Нажали на книгу: ${clickedBook.name}",
-                Toast.LENGTH_SHORT
-            ).show()
+        booksAdapter = BibleBooksAdapter(
+            onBookClick = { clickedBook ->
+                Toast.makeText(
+                    requireContext(),
+                    "Нажали на книгу: ${clickedBook.name}",
+                    Toast.LENGTH_SHORT
+                ).show()
 
-            // Сообщаем ViewModel о выборе книги — LiveData сама обновит список
-            viewModel.selectBook(clickedBook.id)
+                // Сообщаем ViewModel о выборе книги — LiveData сама обновит список
+                viewModel.selectBook(clickedBook.id)
 
-            findNavController().navigate(
-                R.id.action_feedFragment_to_fragmentChapter2,
+                findNavController().navigate(
+                    R.id.action_feedFragment_to_fragmentChapter2,
 
-//                    chapterId = clickedBook.id
-                   Bundle().apply {
+    //                    chapterId = clickedBook.id
+                    Bundle().apply {
                         putInt("ARG_BOOK_ID", clickedBook.id) // Передаем именно Int!
-                       putString("ARG_BOOK_NAME", clickedBook.name)
+                        putString("ARG_BOOK_NAME", clickedBook.name)
                     }
                 )
-        }
+            },
+            recyclerView = binding.recyclerViewBooks
+        )
         (activity as? AppActivity)?.updateTopBarTitle("Аудио Библия")
         // 2. Настраиваем RecyclerView
         binding.recyclerViewBooks.apply {
@@ -81,10 +84,14 @@ class FeedFragment : Fragment() {
             adapter = booksAdapter
         }
 
+
         // Add scroll listener to scale centered item
         binding.recyclerViewBooks.addOnScrollListener(object : androidx.recyclerview.widget.RecyclerView.OnScrollListener() {
             override fun onScrolled(recyclerView: androidx.recyclerview.widget.RecyclerView, dx: Int, dy: Int) {
                 super.onScrolled(recyclerView, dx, dy)
+                if (dy != 0) {
+                    booksAdapter.resetExpandedCard()
+                }
                 applyScaleToChildren()
             }
 
@@ -92,6 +99,7 @@ class FeedFragment : Fragment() {
                 super.onScrollStateChanged(recyclerView, newState)
                 // ensure final state when scrolling stops
                 if (newState == androidx.recyclerview.widget.RecyclerView.SCROLL_STATE_IDLE) {
+                    booksAdapter.resetExpandedCard()
                     applyScaleToChildren()
                 }
             }

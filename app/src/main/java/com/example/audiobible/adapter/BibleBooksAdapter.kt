@@ -17,8 +17,19 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 class BibleBooksAdapter(
-    private val onBookClick: (Book) -> Unit
+    private val onBookClick: (Book) -> Unit,
+    private val recyclerView: RecyclerView? = null
 ) : ListAdapter<Book, BibleBooksAdapter.BookViewHolder>(BookDiffCallback()) {
+
+    private var expandedPosition: Int = RecyclerView.NO_POSITION
+
+    fun resetExpandedCard() {
+        if (expandedPosition == RecyclerView.NO_POSITION) return
+        val previous = expandedPosition
+        expandedPosition = RecyclerView.NO_POSITION
+        notifyItemChanged(previous)
+    }
+
 
     override fun onCreateViewHolder(parent: ViewGroup, viewType: Int): BookViewHolder {
         val binding = CardBookBinding.inflate(
@@ -61,6 +72,7 @@ class BibleBooksAdapter(
 
             // Напрямую связываем визуальное состояние с полем модели данных
             updateSelectionState(book)
+            updateExpandedState(bindingAdapterPosition)
 
             // Сбрасываем изображение по умолчанию
             binding.imageViewCover.setImageDrawable(null)
@@ -128,7 +140,60 @@ class BibleBooksAdapter(
             binding.root.setOnClickListener {
                 onBookClick(book)
             }
+
+            binding.arrows.setOnClickListener {
+                val adapterPosition = bindingAdapterPosition
+                if (adapterPosition == RecyclerView.NO_POSITION) return@setOnClickListener
+
+                val isExpanded = expandedPosition == adapterPosition
+                if (expandedPosition != RecyclerView.NO_POSITION && !isExpanded) {
+                    val previous = expandedPosition
+                    expandedPosition = RecyclerView.NO_POSITION
+                    notifyItemChanged(previous)
+                }
+
+                expandedPosition = if (isExpanded) RecyclerView.NO_POSITION else adapterPosition
+
+                if (!isExpanded && recyclerView != null) {
+                    // scroll first so expanded item has room — calculate offset to center expanded item
+                    val density = binding.root.resources.displayMetrics.density
+                    val expandedHeight = (180 * density).toInt()
+                    recyclerView.post {
+                        val lm = recyclerView.layoutManager
+                        if (lm is androidx.recyclerview.widget.LinearLayoutManager) {
+                            val offset = (recyclerView.height - expandedHeight) / 2
+                            lm.scrollToPositionWithOffset(adapterPosition, offset)
+                        } else {
+                            recyclerView.smoothScrollToPosition(adapterPosition)
+                        }
+
+                        // notify after scrolling to avoid jumpy re-layout
+                        notifyItemChanged(adapterPosition)
+                    }
+                } else {
+                    notifyItemChanged(adapterPosition)
+                }
+            }
+
         }
+
+        private fun updateExpandedState(position: Int) {
+            val isExpanded = position == expandedPosition
+            val layoutParams = binding.layoutBackground.layoutParams
+            val defaultHeight = (120 * binding.root.resources.displayMetrics.density).toInt()
+            val expandedHeight = (180 * binding.root.resources.displayMetrics.density).toInt()
+            layoutParams.height = if (isExpanded) expandedHeight else defaultHeight
+            binding.layoutBackground.layoutParams = layoutParams
+
+            binding.root.apply {
+                scaleX = 1f
+                scaleY = 1f
+                translationY = 0f
+                elevation = if (isExpanded) 18f else 4f
+                translationZ = if (isExpanded) 12f else 0f
+            }
+        }
+
 
         // Обновление состояния выделения И цвета фона карточки (вызывается и при bind, и через payloads)
         fun updateSelectionState(book: Book) {
