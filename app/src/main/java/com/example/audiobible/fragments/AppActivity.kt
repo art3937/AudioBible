@@ -171,7 +171,7 @@ class AppActivity : AppCompatActivity() {
 
         // Add checkbox item for image generation
         val prefs = getSharedPreferences("app_prefs", MODE_PRIVATE)
-        val enabled = prefs.getBoolean("generate_images_enabled", true)
+        val enabled = prefs.getBoolean("generate_images_enabled", false)
         val toggleItem = menu.add(0, com.example.audiobible.R.id.action_toggle_images, 0, "Генерировать картинки")
         toggleItem.isCheckable = true
         toggleItem.isChecked = enabled
@@ -190,7 +190,7 @@ class AppActivity : AppCompatActivity() {
                     true
                 }
 
-                com.example.audiobible.R.id.action_toggle_images -> {
+                R.id.action_toggle_images -> {
                     val currently = prefs.getBoolean("generate_images_enabled", true)
                     val next = !currently
                     prefs.edit().putBoolean("generate_images_enabled", next).apply()

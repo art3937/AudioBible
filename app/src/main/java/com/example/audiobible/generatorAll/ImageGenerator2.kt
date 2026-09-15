@@ -1,34 +1,47 @@
 package com.example.audiobible.generatorAll
 
+
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.util.Base64
 import android.util.Log
-import android.content.Context
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.HttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
-import org.json.JSONObject
 import java.io.File
+import java.net.InetSocketAddress
+import java.net.Proxy
 import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 
-object ImageGenerator {
+object ImageGenerator2 {
 
-    private val apiKey = "AQVNzPwHVC9lDUrlE2DZGzQbS_H_4sFriSsE-Fhw"
-    private val folderId = "b1gnho54qb0fv9om5ktf"
-    private const val TAG = "IMAGE_GENERATOR"
+    private const val TAG = "BREAD_PARSER_LOG"
+    private const val MAX_RETRIES = 3
 
-    private const val GENERATE_URL =
-        "https://ai.api.cloud.yandex.net/v1/images/generations"
+    private const val STABLE_PROXY_HOST = "45.43.60.220"
+    private const val STABLE_PROXY_PORT = 8080
+    private val proxyAddress = InetSocketAddress(STABLE_PROXY_HOST, STABLE_PROXY_PORT)
+    private val appProxy = Proxy(Proxy.Type.HTTP, proxyAddress)
 
     private val client = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(120, TimeUnit.SECONDS)
+        .connectTimeout(45, TimeUnit.SECONDS)
+        .readTimeout(50, TimeUnit.SECONDS)
+        .proxy(appProxy)
         .build()
+
+    private val directClient = OkHttpClient.Builder()
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(30, TimeUnit.SECONDS)
+        .proxy(Proxy.NO_PROXY)
+        .build()
+
+    private val mutexMap = mutableMapOf<String, Mutex>()
 
     private fun sha256(input: String): String {
         val md = MessageDigest.getInstance("SHA-256")
@@ -37,9 +50,8 @@ object ImageGenerator {
     }
 
     // ============================================================
-    //  ПРОМПТЫ — без имён и без упоминаний религии
+    //  ПРОМПТЫ КНИГ
     // ============================================================
-
     private fun buildPrompt(bookName: String): String {
         return when (bookName) {
             // Ветхий Завет
@@ -51,7 +63,7 @@ object ImageGenerator {
             "Иисус Навин" -> "Воин в кожаных доспехах стоит перед древней крепостью, на фоне стены и башни"
             "Судьи" -> "Женщина в льняном платье сидит под пальмой, рядом глиняные сосуды и корзина"
             "Руфь" -> "Девушка собирает колосья на пшеничном поле, снопы лежат на земле"
-            "1 Царств" -> "Седой старец с посохом у каменных домов древнего города" // тут можно тоже заменить, если хочешь — скажи чем
+            "1 Царств" -> "Седой старец с посохом у каменных домов древнего города"
             "2 Царств" -> "Молодой человек с арфой во дворе каменного дворца"
             "3 Царств" -> "Правитель на троне в зале с кедровыми колоннами, рядом слуги"
             "4 Царств" -> "Дикий человек в верблюжьей шкуре стоит у входа в горную пещеру"
@@ -87,7 +99,7 @@ object ImageGenerator {
             "Матфей" -> "Мытарь за столом пересчитывает монеты, на столе лежат таблички и мешочки"
             "Марк" -> "Юноша пишет на свитке при свете лампы, вокруг стопки пергаментов"
             "Лука" -> "Врач осматривает больного в комнате, на полке склянки и бинты"
-            "Иоанн" -> "Старец на скалистом берегу смотрит на море на закате" // если «старец» тоже не ок — скажи, заменю на «человек»
+            "Иоанн" -> "Старец на скалистом берегу смотрит на море на закате"
             "Деяния" -> "Группа людей разных национальностей разговаривает на площади портового города"
             "Римлянам" -> "Солдат пишет письмо за столом в палатке, вокруг военное снаряжение"
             "1 Коринфянам" -> "Гончар за гончарным кругом формирует сосуд, на полках готовые изделия"
@@ -114,16 +126,16 @@ object ImageGenerator {
             else -> "На тему библия"
         }
     }
-
     suspend fun generateImageForBook(context: Context, bookName: String): Bitmap? {
         val prompt = buildPrompt(bookName)
-        return generateImage(context, prompt)
+        // Передаем bookName для точной уникальности кэша каждой книги
+        return generateImage(context, prompt, bookName)
     }
 
-    fun getCachedImage(context: Context, finalPrompt: String): Bitmap? {
+    fun getCachedImage(context: Context, bookName: String): Bitmap? {
         try {
             val cacheDir = File(context.cacheDir, "image_cache")
-            val filename = sha256(finalPrompt) + ".png"
+            val filename = sha256(bookName) + ".png" // Кэш строго по названию книги
             val cacheFile = File(cacheDir, filename)
             if (cacheFile.exists() && cacheFile.length() > 0) {
                 return BitmapFactory.decodeFile(cacheFile.absolutePath)
@@ -134,83 +146,161 @@ object ImageGenerator {
         return null
     }
 
-    suspend fun generateImage(context: Context, finalPrompt: String): Bitmap? = withContext(Dispatchers.IO) {
-        try {
-            val cacheDir = File(context.cacheDir, "image_cache")
-            if (!cacheDir.exists()) cacheDir.mkdirs()
-            val filename = sha256(finalPrompt) + ".png"
-            val cacheFile = File(cacheDir, filename)
+    suspend fun generateImage(context: Context, russianPrompt: String, bookName: String): Bitmap? =
+        withContext(Dispatchers.IO) {
 
-            if (cacheFile.exists() && cacheFile.length() > 0) {
-                try {
-                    return@withContext BitmapFactory.decodeFile(cacheFile.absolutePath)
-                } catch (e: Exception) {}
+            // 1. Проверяем кэш по названию книги перед сетевыми запросами
+            val cachedBitmap = getCachedImage(context, bookName)
+            if (cachedBitmap != null) {
+                Log.d(TAG, "[IMAGE] Изображение для книги '$bookName' найдено в кэше. Сеть не трогаем.")
+                return@withContext cachedBitmap
             }
 
-            Log.d(TAG, "Запуск генерации. Prompt: \"$finalPrompt\"")
+            Log.d(TAG, "[IMAGE] ---> СТАРТ ПЕРЕВОДА для книги '$bookName'. Текст: $russianPrompt")
 
-            val jsonBody = JSONObject().apply {
-                put("model", "art://$folderId/aliceai-image-art-3.0")
-                put("prompt", finalPrompt)
-                put("size", "1x1")
+            // Прямой перевод без TextAutoCorrector
+            val englishPrompt = try {
+                Log.d(TAG, "[IMAGE] Перевод промпта...")
+                TextTranslator.translateRuToEn(russianPrompt)
+            } catch (e: Exception) {
+                Log.e(TAG, "[IMAGE] Ошибка перевода: ${e.localizedMessage}. Используем исходный русский.")
+                russianPrompt
             }
 
-            Log.d(TAG, "Тело запроса:\n${jsonBody.toString(2)}")
+            val enhancedPrompt = "$englishPrompt. High quality, clear details, well-defined shapes, rich colors."
 
-            val mediaType = "application/json; charset=utf-8".toMediaType()
-            val requestBody = jsonBody.toString().toRequestBody(mediaType)
+            // Ключ для Mutex-синхронизации параллельных запросов
+            val requestKey = sha256(enhancedPrompt)
 
-            val request = Request.Builder()
-                .url(GENERATE_URL)
-                .post(requestBody)
-                .addHeader("Authorization", "Api-Key $apiKey")
-                .addHeader("Content-Type", "application/json")
-                .build()
+            val mutex = synchronized(mutexMap) {
+                mutexMap.getOrPut(requestKey) { Mutex() }
+            }
 
-            Log.d(TAG, "Отправка запроса...")
+            try {
+                mutex.withLock {
+                    val cacheDir = File(context.cacheDir, "image_cache")
+                    if (!cacheDir.exists()) cacheDir.mkdirs()
+                    val filename = sha256(bookName) + ".png"
+                    val cacheFile = File(cacheDir, filename)
 
-            client.newCall(request).execute().use { response ->
-                val bodyStr = response.body?.string()
-                Log.d(TAG, "Код: ${response.code} | Тело: ${bodyStr?.take(500)}")
-
-                if (!response.isSuccessful || bodyStr.isNullOrBlank()) {
-                    Log.e(TAG, "Ошибка генерации: ${response.code} | $bodyStr")
-                    return@withContext null
-                }
-
-                val json = JSONObject(bodyStr)
-                val dataArray = json.optJSONArray("data")
-                if (dataArray == null || dataArray.length() == 0) {
-                    Log.e(TAG, "Нет поля data в ответе: $bodyStr")
-                    return@withContext null
-                }
-
-                val b64 = dataArray.getJSONObject(0).optString("b64_json", "")
-                if (b64.isBlank()) {
-                    Log.e(TAG, "b64_json пуст в ответе: $bodyStr")
-                    return@withContext null
-                }
-
-                Log.d(TAG, "Декодируем Base64 в Bitmap...")
-
-                val imageBytes = Base64.decode(b64, Base64.DEFAULT)
-
-                try {
-                    File(cacheDir, filename).outputStream().use { fos ->
-                        fos.write(imageBytes)
+                    // Повторная проверка кэша внутри лока
+                    if (cacheFile.exists() && cacheFile.length() > 0) {
+                        try {
+                            return@withContext BitmapFactory.decodeFile(cacheFile.absolutePath)
+                        } catch (e: Exception) {
+                            Log.w(TAG, "Ошибка чтения кэша в локе: ${e.localizedMessage}")
+                        }
                     }
-                } catch (e: Exception) {
-                    Log.w(TAG, "Не удалось сохранить в кэш: ${e.localizedMessage}")
-                }
 
-                val bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
-                Log.d(TAG, "Готово! Bitmap: ${bitmap?.width}x${bitmap?.height}")
-                return@withContext bitmap
+                    // БЕСКОНЕЧНЫЙ ЦИКЛ ПОПЫТОК
+                    var attempt = 1
+                    while (true) {
+                        try {
+                            val randomSeed = (1..100_000).random()
+                            val targetUrl = HttpUrl.Builder()
+                                .scheme("https")
+                                .host("image.pollinations.ai")
+                                .addPathSegment("p")
+                                .addPathSegment(enhancedPrompt)
+                                .addQueryParameter("width", "512")
+                                .addQueryParameter("height", "512")
+                                .addQueryParameter("model", "flux")
+                                .addQueryParameter("seed", randomSeed.toString())
+                                .addQueryParameter("nologo", "true")
+                                .build()
+
+                            Log.d(TAG, "[IMAGE] Книга '$bookName'. Попытка $attempt через ПРОКСИ ($STABLE_PROXY_HOST). URL: $targetUrl")
+
+                            var bytes: ByteArray? = null
+
+                            // 1. Попытка запроса через основной клиент с ПРОКСИ
+                            try {
+                                bytes = client.newCall(generateRequest(targetUrl)).execute().use { response ->
+                                    if (!response.isSuccessful) {
+                                        Log.e(TAG, "[IMAGE] ОШИБКА ПРОКСИ: HTTP ${response.code} (попытка $attempt)")
+                                        return@use null
+                                    }
+                                    val body = response.body ?: return@use null
+                                    val rawBytes = body.bytes()
+                                    if (rawBytes.isEmpty()) return@use null
+
+                                    // Проверка на Cloudflare HTML заглушки
+                                    if (rawBytes.size < 500_000) {
+                                        val textCheck = String(rawBytes, Charsets.UTF_8)
+                                        if (textCheck.trim().startsWith("<!DOCTYPE") || textCheck.contains("<html")) {
+                                            Log.e(TAG, "[IMAGE] ОШИБКА ПРОКСИ: Скачался HTML вместо картинки.")
+                                            return@use null
+                                        }
+                                    }
+                                    Log.i(TAG, "[IMAGE] УСПЕШНО СКАЧАНО ЧЕРЕЗ ПРОКСИ! Размер: ${rawBytes.size} байт.")
+                                    rawBytes
+                                }
+                            } catch (proxyException: Exception) {
+                                Log.w(TAG, "[IMAGE] СБОЙ СЕТИ ПРОКСИ на попытке $attempt: ${proxyException.localizedMessage}")
+                            }
+
+                            // 2. АВАРИЙНЫЙ ОБХОД НАПРЯМУЮ БЕЗ ПРОКСИ
+                            if (bytes == null) {
+                                Log.w(TAG, "[АВАРИЙНЫЙ РЕЖИМ] Прокси подвёл. Пробуем скачать НАПРЯМУЮ без прокси...")
+                                try {
+                                    bytes = directClient.newCall(generateRequest(targetUrl)).execute().use { response ->
+                                        if (!response.isSuccessful) {
+                                            Log.e(TAG, "[IMAGE] ОШИБКА НАПРЯМУЮ: HTTP ${response.code}")
+                                            return@use null
+                                        }
+                                        val body = response.body ?: return@use null
+                                        val rawBytes = body.bytes()
+                                        if (rawBytes.isNotEmpty()) {
+                                            Log.i(TAG, "[IMAGE] УСПЕШНО СКАЧАНО НАПРЯМУЮ БЕЗ ПРОКСИ! Размер: ${rawBytes.size} байт.")
+                                            rawBytes
+                                        } else null
+                                    }
+                                } catch (directException: Exception) {
+                                    Log.e(TAG, "[IMAGE] Крах прямого подключения: ${directException.localizedMessage}")
+                                }
+                            }
+
+                            // Если байты успешно получены — сохраняем в кэш и отдаем Bitmap
+                            if (bytes != null) {
+                                try {
+                                    cacheFile.outputStream().use { fos ->
+                                        fos.write(bytes)
+                                    }
+                                    Log.d(TAG, "[IMAGE] Изображение для '$bookName' успешно сохранено в кэш на диск.")
+                                } catch (cacheEx: Exception) {
+                                    Log.w(TAG, "[IMAGE] Ошибка сохранения кэша: ${cacheEx.localizedMessage}")
+                                }
+
+                                val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                                if (bitmap != null) {
+                                    Log.d(TAG, "[IMAGE] Изображение для '$bookName' успешно декодировано в Bitmap.")
+                                    return@withContext bitmap
+                                }
+                            }
+
+                            // Если скачать не получилось, увеличиваем счетчик и делаем паузу
+                            attempt++
+                            delay(3000L)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "[IMAGE] Сбой итерации $attempt: ${e.localizedMessage}")
+                            attempt++
+                            delay(3000L)
+                        }
+                    }
+                }
+            } catch (e: Exception) {
+                Log.e(TAG, "[IMAGE] Крах внутри блокировки: ${e.localizedMessage}", e)
+            } finally {
+                synchronized(mutexMap) { mutexMap.remove(requestKey) }
             }
 
-        } catch (e: Exception) {
-            Log.e(TAG, "Крах: ${e.localizedMessage}", e)
+            return@withContext null
         }
-        return@withContext null
-    }
+
+    private fun generateRequest(targetUrl: HttpUrl): Request =
+        Request.Builder()
+            .url(targetUrl)
+            .addHeader("User-Agent", "Mozilla/5.0 (Android; Mobile)")
+            .get()
+            .build()
 }
