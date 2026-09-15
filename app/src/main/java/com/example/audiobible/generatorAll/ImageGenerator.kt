@@ -1,34 +1,40 @@
 package com.example.audiobible.generatorAll
 
+import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
-import android.util.Base64
 import android.util.Log
-import android.content.Context
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
-import okhttp3.MediaType.Companion.toMediaType
+import okhttp3.HttpUrl
 import okhttp3.OkHttpClient
 import okhttp3.Request
-import okhttp3.RequestBody.Companion.toRequestBody
-import org.json.JSONObject
 import java.io.File
+import java.net.Proxy
 import java.security.MessageDigest
 import java.util.concurrent.TimeUnit
 
 object ImageGenerator {
 
-    private val apiKey = "AQVNzPwHVC9lDUrlE2DZGzQbS_H_4sFriSsE-Fhw"
-    private val folderId = "b1gnho54qb0fv9om5ktf"
-    private const val TAG = "IMAGE_GENERATOR"
+    private const val TAG = "BREAD_PARSER_LOG"
 
-    private const val GENERATE_URL =
-        "https://ai.api.cloud.yandex.net/v1/images/generations"
-
-    private val client = OkHttpClient.Builder()
-        .connectTimeout(30, TimeUnit.SECONDS)
-        .readTimeout(120, TimeUnit.SECONDS)
+    // Базовый клиент под динамические прокси
+    private val baseClient = OkHttpClient.Builder()
+        .connectTimeout(60, TimeUnit.SECONDS)
+        .readTimeout(45, TimeUnit.SECONDS)
         .build()
+
+    // Прямой клиент для аварийного режима без прокси
+    private val directClient = OkHttpClient.Builder()
+        .connectTimeout(40, TimeUnit.SECONDS)
+        .readTimeout(40, TimeUnit.SECONDS)
+        .proxy(Proxy.NO_PROXY)
+        .build()
+
+    private val mutexMap = mutableMapOf<String, Mutex>()
 
     private fun sha256(input: String): String {
         val md = MessageDigest.getInstance("SHA-256")
@@ -36,94 +42,10 @@ object ImageGenerator {
         return digest.joinToString("") { "%02x".format(it) }
     }
 
-    // ============================================================
-    //  ПРОМПТЫ — без имён и без упоминаний религии
-    // ============================================================
-
-    private fun buildPrompt(bookName: String): String {
-        return when (bookName) {
-            // Ветхий Завет
-            "Бытие" -> "Человек стоит на холме, внизу раскинулся лагерь с шатрами, караван верблюдов уходит в пустыню"
-            "Исход" -> "Толпа путников с детьми и поклажей идёт по каменистой тропе у подножия горы"
-            "Левит" -> "Человек в льняных одеждах разжигает костёр в центре пустынного лагеря"
-            "Числа" -> "Вооружённые разведчики осматривают вход в пещеру среди скал"
-            "Второзаконие" -> "Человек на возвышении обращается к собравшейся толпе, вокруг пустынный пейзаж"
-            "Иисус Навин" -> "Воин в кожаных доспехах стоит перед древней крепостью, на фоне стены и башни"
-            "Судьи" -> "Женщина в льняном платье сидит под пальмой, рядом глиняные сосуды и корзина"
-            "Руфь" -> "Девушка собирает колосья на пшеничном поле, снопы лежат на земле"
-            "1 Царств" -> "Седой старец с посохом у каменных домов древнего города" // тут можно тоже заменить, если хочешь — скажи чем
-            "2 Царств" -> "Молодой человек с арфой во дворе каменного дворца"
-            "3 Царств" -> "Правитель на троне в зале с кедровыми колоннами, рядом слуги"
-            "4 Царств" -> "Дикий человек в верблюжьей шкуре стоит у входа в горную пещеру"
-            "1 Паралипоменон" -> "Писец со свитком пишет при свете масляной лампы в тронном зале"
-            "2 Паралипоменон" -> "Правитель в парадных одеждах стоит у колонн храма"
-            "Ездра" -> "Учёный со свитком беседует с людьми в зале персидского дворца"
-            "Неемия" -> "Мужчина руководит рабочими, восстанавливающими городскую стену, лежат камни и инструменты"
-            "Есфирь" -> "Молодая женщина в шёлковых одеждах идёт по залу дворца, вокруг мраморные колонны"
-            "Иов" -> "Человек сидит среди руин, опустив голову, вокруг пыль и камни"
-            "Псалтирь" -> "Пастух играет на лире на склоне холма, рядом пасутся овцы"
-            "Притчи" -> "Учитель объясняет что-то группе молодых людей во дворе дома"
-            "Екклесиаст" -> "Человек смотрит на закат с террасы дворца, тени удлиняются"
-            "Песнь Песней" -> "Пара идёт по саду среди виноградников и цветущих кустов"
-            "Исаия" -> "Оратор в богатых одеждах говорит у городских ворот, вокруг толпа"
-            "Иеремия" -> "Человек в цепях стоит на фоне горящего города, дым поднимается в небо"
-            "Плач Иеремии" -> "Женщина плачет среди обломков стены, рядом разбитые кувшины"
-            "Иезекииль" -> "Человек сидит у реки, в воде тростник, на другом берегу люди"
-            "Даниил" -> "Юноша в роскошных одеждах стоит в зале вавилонского дворца"
-            "Осия" -> "Мужчина стоит у разрушенного каменного алтаря, вокруг сухая трава"
-            "Иоиль" -> "Фермер смотрит на поле, где погибла вся растительность"
-            "Амос" -> "Пастух с посохом стоит под смоковницей, рядом пасутся овцы"
-            "Авдий" -> "Гонец бежит по горной тропе, за спиной сумка, вокруг скалы"
-            "Иона" -> "Моряк держится за борт лодки в штормовом море, волны накрывают палубу"
-            "Михей" -> "Простой человек в грубой одежде стоит у глиняных домов деревни"
-            "Наум" -> "Человек издалека смотрит на город, объятый пламенем"
-            "Аввакум" -> "Стражник на башне смотрит вдаль, горизонт затянут пылью"
-            "Софония" -> "Человек жестикулирует, обращаясь к толпе на рыночной площади"
-            "Аггей" -> "Строитель с молотком и доской стоит у недостроенной стены"
-            "Захария" -> "Человек держит золотой светильник в полутёмном храме"
-            "Малахия" -> "Священнослужитель в простых одеждах стоит у каменного алтаря"
-
-            // Новый Завет
-            "Матфей" -> "Мытарь за столом пересчитывает монеты, на столе лежат таблички и мешочки"
-            "Марк" -> "Юноша пишет на свитке при свете лампы, вокруг стопки пергаментов"
-            "Лука" -> "Врач осматривает больного в комнате, на полке склянки и бинты"
-            "Иоанн" -> "Старец на скалистом берегу смотрит на море на закате" // если «старец» тоже не ок — скажи, заменю на «человек»
-            "Деяния" -> "Группа людей разных национальностей разговаривает на площади портового города"
-            "Римлянам" -> "Солдат пишет письмо за столом в палатке, вокруг военное снаряжение"
-            "1 Коринфянам" -> "Гончар за гончарным кругом формирует сосуд, на полках готовые изделия"
-            "2 Коринфянам" -> "Мореплаватель чинит парус на причале, рядом лодки и канаты"
-            "Галатам" -> "Крестьянин пашет поле на волах, на горизонте горы"
-            "Ефесянам" -> "Купец показывает товары на рынке, вокруг мраморные колонны и прилавки"
-            "Филиппийцам" -> "Римский центурион стоит у казармы, на фоне закатное небо"
-            "Колоссянам" -> "Ткач работает за станком в мастерской, на стенах рулоны ткани"
-            "1 Фессалоникийцам" -> "Кузнец куёт подкову у горна, летят искры"
-            "2 Фессалоникийцам" -> "Столяр строгает доску в светлой мастерской"
-            "1 Тимофею" -> "Молодой ученик слушает наставления старшего мастера"
-            "2 Тимофею" -> "Человек в тёмной камере сидит на скамье, сквозь решётку пробивается свет"
-            "Титу" -> "Чиновник за столом подписывает документы, рядом свитки и печати"
-            "Филимону" -> "Хозяин дома разговаривает с рабом у двери"
-            "Евреям" -> "Путник с посохом идёт по пыльной дороге, вдали караван"
-            "Иакова" -> "Рыбак чинит сеть на берегу озера, рядом лодка"
-            "1 Петра" -> "Пастух гонит овец по горной тропе"
-            "2 Петра" -> "Человек останавливает путников на перекрёстке, что-то объясняет"
-            "1 Иоанна" -> "Мужчина обнимает ребёнка у очага, в комнате тепло и уютно"
-            "2 Иоанна" -> "Женщина открывает дверь входящему гостю"
-            "3 Иоанна" -> "Хозяин угощает гостя за накрытым столом"
-            "Иуды" -> "Воин в доспехах стоит на посту у городских ворот ночью"
-            "Откровение" -> "Человек на скале смотрит на грозовое небо, молнии разрывают тучи"
-            else -> "На тему библия"
-        }
-    }
-
-    suspend fun generateImageForBook(context: Context, bookName: String): Bitmap? {
-        val prompt = buildPrompt(bookName)
-        return generateImage(context, prompt)
-    }
-
-    fun getCachedImage(context: Context, finalPrompt: String): Bitmap? {
+    fun getCachedImage(context: Context, bookName: String): Bitmap? {
         try {
             val cacheDir = File(context.cacheDir, "image_cache")
-            val filename = sha256(finalPrompt) + ".png"
+            val filename = sha256(bookName) + ".png" // Кэш железно разделен по имени книги
             val cacheFile = File(cacheDir, filename)
             if (cacheFile.exists() && cacheFile.length() > 0) {
                 return BitmapFactory.decodeFile(cacheFile.absolutePath)
@@ -134,83 +56,303 @@ object ImageGenerator {
         return null
     }
 
-    suspend fun generateImage(context: Context, finalPrompt: String): Bitmap? = withContext(Dispatchers.IO) {
-        try {
-            val cacheDir = File(context.cacheDir, "image_cache")
-            if (!cacheDir.exists()) cacheDir.mkdirs()
-            val filename = sha256(finalPrompt) + ".png"
-            val cacheFile = File(cacheDir, filename)
+    // ============================================================
+    //  ПРОМПТЫ КНИГ (без упоминаний религии и имен)
+    // ============================================================
+    private fun buildPrompt(bookName: String): String {
+        val name = bookName.lowercase()
 
-            if (cacheFile.exists() && cacheFile.length() > 0) {
-                try {
-                    return@withContext BitmapFactory.decodeFile(cacheFile.absolutePath)
-                } catch (e: Exception) {}
-            }
+        return when {
+            // Ветхий Завет
+            name.contains("бытие") -> "Человек на холме. Внизу палаточный лагерь. Верблюды идут в пустыню"
+            name.contains("исход") -> "Люди с детьми идут по дороге. Рядом большая гора. Камни"
+            name.contains("левит") -> "Человек в белой одежде делает костер. Пустыня. Лагерь"
+            name.contains("числ") -> "Древние воины осматривают вход в темную пещеру. Скалы"
+            name.contains("второзакон") -> "Человек говорит перед большой толпой людей. Пустынный пейзаж"
+            name.contains("навин") -> "Воин в доспехах стоит перед большими воротами каменной крепости"
+            name.contains("судей") -> "Женщина сидит под деревом. Рядом глиняные кувшины и корзины"
+            name.contains("руф") -> "Девушка собирает пшеницу в поле. Желтая трава. Снопы"
+            name.contains("1 царств") || name.contains("первая книга царств") -> "Старый человек с деревянным посохом. Древний каменный город"
+            name.contains("2 царств") || name.contains("вторая книга царств") -> "Молодой парень играет на музыкальном инструменте во дворе дворца"
+            name.contains("3 царств") || name.contains("третья книга царств") -> "Король сидит на троне в большом зале. Колонны. Слуги"
+            name.contains("4 царств") || name.contains("четвертая книга царств") -> "Человек в грубой одежде стоит у входа в пещеру в горах"
+            name.contains("1 паралипоменон") -> "Писатель пишет текст на свитке. Масляная лампа. Древний зал"
+            name.contains("2 паралипоменон") -> "Богатый правитель стоит у колонн большого красивого храма"
+            name.contains("ездр") -> "Мудрец со свитком разговаривает с людьми в каменном дворце"
+            name.contains("нееми") -> "Строители восстанавливают старую городскую стену. Камни и инструменты"
+            name.contains("есфир") -> "Красивая девушка в шелковом платье идет по залу дворца. Колонны"
+            name.contains("иов") -> "Грустный человек сидит на земле среди старых руин и камней"
+            name.contains("псал") -> "Пастух играет на маленькой арфе на зеленом холме. Рядом овцы"
+            name.contains("притч") -> "Учитель говорит с молодыми учениками во дворе дома"
+            name.contains("екклесиаст") -> "Человек смотрит на закат солнца с балкона дворца. Тени"
+            name.contains("песн") -> "Мужчина и женщина идут по зеленому саду. Виноградники. Цветы"
+            name.contains("исаи") -> "Оратор говорит речь перед людьми у ворот города"
+            name.contains("иереми") -> "Человек в железных цепях. На фоне дым и старый город"
+            name.contains("плач") -> "Женщина плачет у разрушенной стены. Разбитая посуда на земле"
+            name.contains("иезекиил") -> "Человек сидит на берегу реки. Вода и зеленая трава"
+            name.contains("даниил") -> "Молодой человек в красивой одежде стоит в огромном зале дворца"
+            name.contains("осии") -> "Мужчина стоит у старого каменного памятника. Сухая трава"
+            name.contains("иоил") -> "Фермер смотрит на сухое пустое поле. Плохая погода"
+            name.contains("амос") -> "Пастух с палкой стоит под зеленым деревом. Рядом овцы"
+            name.contains("авдий") -> "Бегун бежит по горной дороге. Вокруг большие скалы"
+            name.contains("ион") -> "Моряк в маленькой лодке. Большие волны. Шторм в море"
+            name.contains("михе") -> "Простой человек в бедной одежде стоит возле глиняных домов"
+            name.contains("наум") -> "Человек смотрит на далекий город. Огонь и дым в небе"
+            name.contains("аввакум") -> "Стражник на каменной башне смотрит вдаль. Песок и пыль"
+            name.contains("софони") -> "Человек разговаривает с толпой на торговой площади города"
+            name.contains("агге") -> "Рабочий с деревянной доской строит стену дома. Инструменты"
+            name.contains("захари") -> "Человек держит золотой подсвечник в темной комнате храма"
+            name.contains("малахи") -> "Человек в простой одежде стоит у каменного стола для костра"
 
-            Log.d(TAG, "Запуск генерации. Prompt: \"$finalPrompt\"")
+            // Новый Завет
+            name.contains("матфе") -> "Человек за деревянным столом считает золотые монеты"
+            name.contains("марк") -> "Молодой парень пишет текст на бумаге. Горит свеча"
+            name.contains("лук") -> "Старый врач осматривает больного человека в комнате"
+            name.contains("иоанн") -> "Старик на каменном берегу смотрит на синее море"
+            name.contains("деяни") -> "Группа людей эмоционально разговаривает на городской площади"
+            name.contains("римлян") -> "Воин пишет письмо за столом внутри военной палатки"
+            name.contains("коринфянам") -> "Мастер делает глиняный горшок на специальном круге"
+            name.contains("галатам") -> "Фермер работает в поле. Большие быки тянут плуг"
+            name.contains("ефесянам") -> "Продавец показывает красивые ткани на рынке города"
+            name.contains("филиппийцам") -> "Римский солдат в доспехах стоит на посту у здания"
+            name.contains("колоссянам") -> "Человек делает ткань на старом деревянном станке"
+            name.contains("фессалоникийцам") -> "Кузнец работает с горячим металлом и молотом в мастерской"
+            name.contains("тимофе") -> "Молодой парень внимательно слушает старого мастера"
+            name.contains("титу") -> "Человек за столом подписывает важные документы пером"
+            name.contains("филимон") -> "Хозяин дома спокойно разговаривает с рабочим в комнате"
+            name.contains("евре") -> "Путник со старой палкой идет по сухой пыльной дороге"
+            name.contains("иаков") -> "Рыбак делает рыболовную сеть на песке у озера"
+            name.contains("петр") -> "Пастух ведет группу белых овец по горной тропинке"
+            name.contains("иуд") -> "Воин с мечом стоит на посту ночью. Темное небо"
+            name.contains("откровение") || name.contains("апокалипсис") -> "Человек на высокой скале смотрит на черное грозовое небо"
 
-            val jsonBody = JSONObject().apply {
-                put("model", "art://$folderId/aliceai-image-art-3.0")
-                put("prompt", finalPrompt)
-                put("size", "1x1")
-            }
+            else -> "Древний библейский сюжет, исторический стиль"
+        }
+    }
 
-            Log.d(TAG, "Тело запроса:\n${jsonBody.toString(2)}")
 
-            val mediaType = "application/json; charset=utf-8".toMediaType()
-            val requestBody = jsonBody.toString().toRequestBody(mediaType)
 
-            val request = Request.Builder()
-                .url(GENERATE_URL)
-                .post(requestBody)
-                .addHeader("Authorization", "Api-Key $apiKey")
-                .addHeader("Content-Type", "application/json")
-                .build()
+    suspend fun generateImageForBook(
+        context: Context,
+        bookName: String
+    ): Bitmap? {
+        val prompt = buildPrompt(bookName)
+        return generateImage(context, prompt, bookName)
+    }
 
-            Log.d(TAG, "Отправка запроса...")
+    suspend fun generateImage(
+        context: Context,
+        russianPrompt: String,
+        bookName: String
+    ): Bitmap? = withContext(Dispatchers.IO) {
 
-            client.newCall(request).execute().use { response ->
-                val bodyStr = response.body?.string()
-                Log.d(TAG, "Код: ${response.code} | Тело: ${bodyStr?.take(500)}")
+        // 1. Проверка кэша на самом старте
+        val cachedBitmap = getCachedImage(context, bookName)
+        if (cachedBitmap != null) {
+            Log.d(TAG, "[IMAGE] Изображение '$bookName' выдано из кэша.")
+            return@withContext cachedBitmap
+        }
 
-                if (!response.isSuccessful || bodyStr.isNullOrBlank()) {
-                    Log.e(TAG, "Ошибка генерации: ${response.code} | $bodyStr")
-                    return@withContext null
-                }
 
-                val json = JSONObject(bodyStr)
-                val dataArray = json.optJSONArray("data")
-                if (dataArray == null || dataArray.length() == 0) {
-                    Log.e(TAG, "Нет поля data в ответе: $bodyStr")
-                    return@withContext null
-                }
+        Log.d(TAG, "[IMAGE] ---> СТАРТ ПЕРЕВОДА для '$bookName'.")
 
-                val b64 = dataArray.getJSONObject(0).optString("b64_json", "")
-                if (b64.isBlank()) {
-                    Log.e(TAG, "b64_json пуст в ответе: $bodyStr")
-                    return@withContext null
-                }
-
-                Log.d(TAG, "Декодируем Base64 в Bitmap...")
-
-                val imageBytes = Base64.decode(b64, Base64.DEFAULT)
-
-                try {
-                    File(cacheDir, filename).outputStream().use { fos ->
-                        fos.write(imageBytes)
-                    }
-                } catch (e: Exception) {
-                    Log.w(TAG, "Не удалось сохранить в кэш: ${e.localizedMessage}")
-                }
-
-                val bitmap = BitmapFactory.decodeByteArray(imageBytes, 0, imageBytes.size)
-                Log.d(TAG, "Готово! Bitmap: ${bitmap?.width}x${bitmap?.height}")
-                return@withContext bitmap
-            }
+        val englishPrompt = try {
+            TextTranslator.translateRuToEn(russianPrompt)
 
         } catch (e: Exception) {
-            Log.e(TAG, "Крах: ${e.localizedMessage}", e)
+            Log.e(TAG, "[IMAGE] Ошибка перевода: ${e.localizedMessage}")
+            russianPrompt
         }
+        Log.e(TAG, "[IMAGE] переведено: $englishPrompt")
+        // val suffix = ". High quality, clear details, rich colors."
+        val enhancedPrompt = "$englishPrompt"//$suffix"
+        val requestKey = sha256(enhancedPrompt)
+
+        val mutex = synchronized(mutexMap) {
+            mutexMap.getOrPut(requestKey) { Mutex() }
+        }
+
+        try {
+            mutex.withLock {
+                val cacheDir = File(context.cacheDir, "image_cache")
+                if (!cacheDir.exists()) cacheDir.mkdirs()
+                val filename = sha256(bookName) + ".png"
+                val cacheFile = File(cacheDir, filename)
+
+                // Повторная проверка кэша в локе
+                if (cacheFile.exists() && cacheFile.length() > 0) {
+                    try {
+                        return@withContext BitmapFactory
+                            .decodeFile(cacheFile.absolutePath)
+                    } catch (e: Exception) {
+                        Log.w(TAG, "Ошибка чтения кэша в локе")
+                    }
+                }
+
+                // БЕСКОНЕЧНЫЙ ЦИКЛ ПОПЫТОК
+                var attempt = 1
+                while (true) {
+                    // ПРОВЕРКА КЭША НА КАЖДОЙ ИТЕРАЦИИ ЦИКЛА
+                    if (cacheFile.exists() && cacheFile.length() > 1024) { // Больше 1 КБ, чтобы отсечь пустые файлы
+                        try {
+                            val bitmap = BitmapFactory.decodeFile(cacheFile.absolutePath)
+                            if (bitmap != null) {
+                                Log.d(
+                                    TAG,
+                                    "[IMAGE] '$bookName' обнаружен в кэше внутри цикла! Успешный выход."
+                                )
+                                return@withContext bitmap
+                            }
+                        } catch (e: Exception) {
+                            Log.w(
+                                TAG,
+                                "Ошибка чтения кэша на попытке $attempt, продолжаем качать..."
+                            )
+                        }
+                    }
+                    try {
+                        val randomSeed = (1..100_000).random()
+                        val targetUrl = HttpUrl.Builder()
+                            .scheme("https")
+                            .host("image.pollinations.ai")
+                            .addPathSegment("p")
+                            .addPathSegment(enhancedPrompt)
+                            .addQueryParameter("width", "512")
+                            .addQueryParameter("height", "512")
+                            .addQueryParameter("model", "flux")
+                            .addQueryParameter("seed", randomSeed.toString())
+                            .addQueryParameter("nologo", "true")
+                            // ЖЕСТКИЙ ФИЛЬТР: запрещаем китайцев, аниме, современную одежду и корейцев
+                            .addQueryParameter("negative", "asian, chinese, korean, japanese, anime, 3d render, modern clothes, makeup")
+                            .build()
+
+                        val currentProxy = ProxyManager
+                            .getProxyForAttempt(attempt)
+
+                        val dynamicClient = baseClient.newBuilder()
+                            .proxy(currentProxy)
+                            .build()
+
+                        Log.d(TAG, "[IMAGE] '$bookName'. Попытка $attempt")
+
+                        var bytes: ByteArray? = null
+
+                        // 1. Попытка через динамический ПРОКСИ
+                        try {
+                            val req = generateRequest(targetUrl, attempt)
+                            bytes = dynamicClient.newCall(req).execute().use { response ->
+                                if (!response.isSuccessful) {
+                                    // Прокси ответил ошибкой (например 403, 502)
+                                    ProxyManager.reportProxyStatus(currentProxy, isSuccess = false)
+                                    return@use null
+                                }
+                                val body = response.body ?: return@use null
+                                val rawBytes = body.bytes()
+                                if (rawBytes.isEmpty()) return@use null
+
+                                // Проверка Cloudflare
+                                if (rawBytes.size < 500_000) {
+                                    val str = String(rawBytes, Charsets.UTF_8)
+                                    if (str.trim()
+                                            .startsWith("<!DOCTYPE") || str.contains("<html")
+                                    ) {
+                                        // Это заглушка Cloudflare, прокси плохой
+                                        ProxyManager.reportProxyStatus(
+                                            currentProxy,
+                                            isSuccess = false
+                                        )
+                                        return@use null
+                                    }
+                                }
+
+                                // ЕСЛИ ДОШЛИ СЮДА — ВСЕ СУПЕР! Прокси живой и отдал картинку
+                                ProxyManager.reportProxyStatus(currentProxy, isSuccess = true)
+                                rawBytes
+                            }
+                        } catch (proxyException: Exception) {
+                            Log.w(TAG, "[IMAGE] Сбой прокси: ${proxyException.message}")
+                            // Сетевой сбой или таймаут — удаляем прокси
+                            ProxyManager.reportProxyStatus(currentProxy, isSuccess = false)
+                        }
+
+
+                        // 2. АВАРИЙНЫЙ ОБХОД НАПРЯМУЮ
+                        if (bytes == null) {
+                            try {
+                                val req = generateRequest(targetUrl, attempt)
+                                bytes = directClient.newCall(req)
+                                    .execute().use { response ->
+                                        if (!response.isSuccessful) return@use null
+                                        val body = response.body ?: return@use null
+                                        val rawBytes = body.bytes()
+                                        if (rawBytes.isNotEmpty()) rawBytes else null
+                                    }
+                            } catch (directException: Exception) {
+                                Log.e(
+                                    TAG,
+                                    "[IMAGE] Крах прямого подключения ${directException.message}"
+                                )
+                            }
+                        }
+
+                        // 3. Сохранение в кэш и возврат
+                        if (bytes != null) {
+                            try {
+                                cacheFile.outputStream().use { fos -> fos.write(bytes) }
+                                Log.d(TAG, "[IMAGE] Успешно сохранено в кэш.")
+                            } catch (cacheEx: Exception) {
+                                Log.w(TAG, "Ошибка записи кэша")
+                            }
+
+                            val bitmap = BitmapFactory.decodeByteArray(bytes, 0, bytes.size)
+                            if (bitmap != null) return@withContext bitmap
+                        }
+
+                    } catch (e: Exception) {
+                        Log.e(TAG, "[IMAGE] Сбой итерации $attempt для $bookName: ${e.message}")
+                    }
+
+                    // === ЖЕСТКАЯ ЗАДЕРЖКА ВНЕ TRY-CATCH ===
+                    // Теперь, даже если всё взорвалось, дятел ОСТАНОВИТСЯ и подождет
+                    attempt++
+
+                    val delayTime = when (attempt) {
+                        2 -> 4000L
+                        3 -> 8000L
+                        else -> 15000L // Не даем спамить лог чаще чем раз в 15 секунд
+                    }
+                    Log.w(TAG, "[IMAGE] Засыпаем на $delayTime мс перед попыткой $attempt")
+                    delay(delayTime)
+                } // Конец while
+            } // Конец mutex
+        } catch (e: Exception) {
+            Log.e(TAG, "[IMAGE] Крах блокировки: ${e.localizedMessage}")
+        } finally {
+            synchronized(mutexMap) { mutexMap.remove(bookName) } // Проверь, что тут bookName, а не requestKey!
+        }
+
         return@withContext null
+    }
+
+
+    private fun generateRequest(targetUrl: okhttp3.HttpUrl, attempt: Int): Request {
+        // Список разных живых браузеров, чтобы сайт думал, что заходят разные люди
+        val userAgents = listOf(
+            "Mozilla/5.0 (Linux; Android 10; K) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Mobile Safari/537.36",
+            "Mozilla/5.0 (iPhone; CPU iPhone OS 17_4_1 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.4.1 Mobile/15E148 Safari/604.1",
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/123.0.0.0 Safari/537.36",
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Safari/605.1.15",
+            "Mozilla/5.0 (Linux; Android 13; SAMSUNG SM-S911B) AppleWebKit/537.36 (KHTML, like Gecko) SamsungBrowser/23.0 Chrome/115.0.0.0 Mobile Safari/537.36"
+        )
+        // Выбираем заголовок на основе номера попытки
+        val selectedAgent = userAgents[attempt % userAgents.size]
+
+        return Request.Builder()
+            .url(targetUrl)
+            .addHeader("User-Agent", selectedAgent)
+            .addHeader("Accept", "image/avif,image/webp,image/apng,image/*,*/*;q=0.8")
+            .addHeader("Accept-Language", "en-US,en;q=0.9")
+            .get()
+            .build()
     }
 }

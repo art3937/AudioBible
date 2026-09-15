@@ -29,6 +29,8 @@ import com.example.audiobible.databinding.ActivityAppBinding
 import com.example.audiobible.viewModels.TrackViewModel
 import dagger.hilt.android.AndroidEntryPoint
 import androidx.lifecycle.lifecycleScope
+import com.example.audiobible.generatorAll.ProxyManager
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 
 @AndroidEntryPoint
@@ -43,6 +45,16 @@ class AppActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+
+        // ЗАПУСКАТЕЛЬ ДЯТЛА: Качаем базу один раз при старте приложения
+        lifecycleScope.launch(Dispatchers.IO) {
+            try {
+                Log.d("BREAD_PARSER_LOG", "[PROXY] Инициализация прокси-базы при старте приложения...")
+                ProxyManager.fetchFreshProxies()
+            } catch (e: Exception) {
+                Log.e("BREAD_PARSER_LOG", "[PROXY] Сбой предзагрузки баз: ${e.message}")
+            }
+        }
 
         // 1. Включаем Edge-to-Edge: разрешаем контенту (книге) затекать под StatusBar
         WindowCompat.setDecorFitsSystemWindows(window, false)

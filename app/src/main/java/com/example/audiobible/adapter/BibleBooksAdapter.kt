@@ -10,6 +10,7 @@ import androidx.recyclerview.widget.RecyclerView
 import com.example.audiobible.databinding.CardBookBinding
 import com.example.audiobible.dto.Book
 import android.view.View
+import com.example.audiobible.generatorAll.ImageGenerator
 //import com.example.audiobible.generatorAll.ImageGenerator
 import com.example.audiobible.generatorAll.ImageGenerator2
 import kotlinx.coroutines.CoroutineScope
@@ -97,7 +98,7 @@ class BibleBooksAdapter(
                 // Do not initiate network/generation. However, if cached image exists — show it.
                 CoroutineScope(Dispatchers.IO).launch {
                     try {
-                        val cached = ImageGenerator2.getCachedImage(binding.root.context, book.name)
+                        val cached = ImageGenerator.getCachedImage(binding.root.context, book.name)
                         withContext(Dispatchers.Main) {
                             if (cached != null) {
                                 binding.imageViewCover.setImageBitmap(cached)
@@ -120,7 +121,7 @@ class BibleBooksAdapter(
                 // Генерируем фон для всех карточек (если нет в кэше, с локальной блокировкой)
                 CoroutineScope(Dispatchers.Main).launch {
                     try {
-                        val bmp = ImageGenerator2.generateImageForBook(binding.root.context, book.name)
+                        val bmp = ImageGenerator.generateImageForBook(binding.root.context, book.name)
                         if (bmp != null) {
                             binding.imageViewCover.setImageBitmap(bmp)
                             binding.imageViewCover.visibility = View.VISIBLE
