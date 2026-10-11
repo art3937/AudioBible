@@ -45,6 +45,8 @@ android {
 }
 
 dependencies {
+    implementation(libs.lottie)
+
     implementation(libs.androidx.appcompat)
     implementation(libs.androidx.constraintlayout)
     implementation(libs.androidx.core.ktx)
@@ -82,7 +84,9 @@ dependencies {
 
     implementation("androidx.media3:media3-session:1.10.1")
     // media compat для NotificationCompat.MediaStyle и MediaSessionCompat.Token
-    implementation("com.airbnb.android:lottie:6.0.0")
+
+
+
 
     // 1. Официальный SDK от Google для работы с Gemini API
     implementation("com.google.ai.client.generativeai:generativeai:0.9.0")
@@ -95,5 +99,10 @@ dependencies {
 
     // Стандартный и надежный сетевой клиент
     implementation("com.squareup.okhttp3:okhttp:4.12.0")
+    implementation("com.facebook.shimmer:shimmer:0.5.0")
+    dependencies {
+        // Версия библиотеки Lottie для классических XML View
+
+    }
 
 }

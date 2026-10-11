@@ -19,7 +19,7 @@
         app:layout_constraintTop_toTopOf="parent"
         app:navGraph="@navigation/nav_main" />
 
-    <!-- Полупрозрачная верхняя панель (исправленная) -->
+    <!-- Полупрозрачная верхняя панель -->
     <androidx.constraintlayout.widget.ConstraintLayout
         android:id="@+id/topBar"
         android:layout_width="0dp"
@@ -46,14 +46,26 @@
             android:visibility="gone"
             app:layout_constraintStart_toStartOf="parent"
             app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintBottom_toBottomOf="parent" /> <!-- ИСПРАВЛЕНО НА constraintBottom_toBottomOf -->
+            app:layout_constraintBottom_toBottomOf="parent" />
+
+        <!-- КОНТЕЙНЕР ДЛЯ АНИМАЦИИ (Вставили сюда вместо <View>) -->
+        <FrameLayout
+            android:id="@+id/activityAnimationContainer"
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:layout_marginStart="8dp"
+            android:background="@android:color/transparent"
+            android:foreground="?attr/selectableItemBackgroundBorderless"
+            app:layout_constraintStart_toEndOf="@id/btnBack"
+            app:layout_constraintTop_toTopOf="parent"
+            app:layout_constraintBottom_toBottomOf="parent" />
 
         <!-- Название книги -->
         <TextView
             android:id="@+id/tvBookTitle"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:text=""
+            android:text="название"
             android:textColor="#FFFFFF"
             android:textSize="18sp"
             android:textStyle="bold"
@@ -62,10 +74,10 @@
             android:maxLines="1"
             android:layout_marginStart="16dp"
             android:layout_marginEnd="16dp"
-            app:layout_constraintStart_toEndOf="@id/btnBack"
+            app:layout_constraintStart_toEndOf="@id/activityAnimationContainer"
             app:layout_constraintEnd_toStartOf="@id/fabMenu"
             app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintBottom_toBottomOf="parent" /> <!-- ИСПРАВЛЕНО НА constraintBottom_toBottomOf -->
+            app:layout_constraintBottom_toBottomOf="parent" />
 
         <!-- Кнопка МЕНЮ -->
         <ImageButton
@@ -80,9 +92,8 @@
             android:scaleType="centerInside"
             app:layout_constraintEnd_toEndOf="parent"
             app:layout_constraintTop_toTopOf="parent"
-            app:layout_constraintBottom_toBottomOf="parent" /> <!-- ИСПРАВЛЕНО НА constraintBottom_toBottomOf -->
+            app:layout_constraintBottom_toBottomOf="parent" />
 
     </androidx.constraintlayout.widget.ConstraintLayout>
-
 
 </androidx.constraintlayout.widget.ConstraintLayout>

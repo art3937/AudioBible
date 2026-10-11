@@ -14,6 +14,7 @@ import com.example.audiobible.R
 import com.example.audiobible.databinding.ChaptersAudioBinding
 import com.example.audiobible.dto.AudioItem
 import java.io.IOException
+import androidx.core.view.isVisible
 
 class AdapterChapters(
     private val listener: OnAudioClickListener,
@@ -129,7 +130,7 @@ class AdapterChapters(
 
             updatePlayState(item)
 
-            // --- ПОЧИНЕННОЕ ВЫДЕЛЕНИЕ СТРОК ---
+
             if (item.isSelected) {
                 binding.textViewTitle.setTextColor(Color.YELLOW)
             } else {
@@ -149,7 +150,7 @@ class AdapterChapters(
             binding.imageViewArrow.rotation = 0f
 
             fun toggleExpandState() {
-                val isVisible = binding.textViewChapterContent.visibility == View.VISIBLE
+                val isVisible = binding.textViewChapterContent.isVisible
 
                 if (isVisible) {
                     binding.textViewChapterContent.visibility = View.GONE

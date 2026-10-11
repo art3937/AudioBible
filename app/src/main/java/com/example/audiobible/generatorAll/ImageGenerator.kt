@@ -23,18 +23,25 @@ object ImageGenerator {
 
     // Базовый клиент под динамические прокси
     private val baseClient = OkHttpClient.Builder()
-        .connectTimeout(60, TimeUnit.SECONDS)
-        .readTimeout(45, TimeUnit.SECONDS)
+        .connectTimeout(15, TimeUnit.SECONDS)
+        .readTimeout(15, TimeUnit.SECONDS)
+        .writeTimeout(15, TimeUnit.SECONDS)
+        .retryOnConnectionFailure(false)
         .build()
 
     // Прямой клиент для аварийного режима без прокси
     private val directClient = OkHttpClient.Builder()
-        .connectTimeout(40, TimeUnit.SECONDS)
-        .readTimeout(40, TimeUnit.SECONDS)
+        .connectTimeout(
+            4,
+            TimeUnit.SECONDS
+        ) // ⚡️ ТАЙМАУТ 4 СЕКУНДЫ: Если прокси плохой, отваливаемся СРАЗУ
+        .readTimeout(10, TimeUnit.SECONDS)
+        .writeTimeout(10, TimeUnit.SECONDS)
         .proxy(Proxy.NO_PROXY)
+        .retryOnConnectionFailure(false) // ⚡️ ГЛАВНЫЙ СЕКРЕТ ПРОФИ: Запрещаем OkHttp самовольно повторять запросы и тупить!
         .build()
 
-    private val mutexMap = mutableMapOf<String, Mutex>()
+    private val mutexMap = java.util.concurrent.ConcurrentHashMap<String, Mutex>() //не течет и не требет синхронов
 
     private fun sha256(input: String): String {
         val md = MessageDigest.getInstance("SHA-256")
@@ -94,7 +101,7 @@ object ImageGenerator {
             name.contains("осии") -> "Мужчина стоит у старого каменного памятника. Сухая трава"
             name.contains("иоил") -> "Фермер смотрит на сухое пустое поле. Плохая погода"
             name.contains("амос") -> "Пастух с палкой стоит под зеленым деревом. Рядом овцы"
-            name.contains("авдий") -> "Бегун бежит по горной дороге. Вокруг большие скалы"
+            name.contains("авдия") -> "Бегун древний бежит по горной дороге. Вокруг большие скалы"
             name.contains("ион") -> "Моряк в маленькой лодке. Большие волны. Шторм в море"
             name.contains("михе") -> "Простой человек в бедной одежде стоит возле глиняных домов"
             name.contains("наум") -> "Человек смотрит на далекий город. Огонь и дым в небе"
@@ -148,16 +155,18 @@ object ImageGenerator {
 
     suspend fun generateImageForBook(
         context: Context,
-        bookName: String
+        bookName: String,
+        folderName: String
     ): Bitmap? {
         val prompt = buildPrompt(bookName)
-        return generateImage(context, prompt, bookName)
+        return generateImage(context, prompt, bookName,folderName)
     }
 
     suspend fun generateImage(
         context: Context,
         russianPrompt: String,
-        bookName: String
+        bookName: String,
+        folderName: String
     ): Bitmap? = withContext(Dispatchers.IO) {
 
         // 1. Проверка кэша на самом старте
@@ -168,7 +177,7 @@ object ImageGenerator {
         }
 
 
-        Log.d(TAG, "[IMAGE] ---> СТАРТ ПЕРЕВОДА для '$bookName'.")
+        Log.d(TAG, "[IMAGE] ---> СТАРТ ПЕРЕВОДА для '$russianPrompt'.")
 
         val englishPrompt = try {
             TextTranslator.translateRuToEn(russianPrompt)
@@ -179,12 +188,15 @@ object ImageGenerator {
         }
         Log.e(TAG, "[IMAGE] переведено: $englishPrompt")
         // val suffix = ". High quality, clear details, rich colors."
-        val enhancedPrompt = "$englishPrompt"//$suffix"
+       // val enhancedPrompt = "$englishPrompt. High quality, realistic oil painting style. #$folderName"
+        // Возвращаем исходный суффикс с высокой четкостью и сочными цветами
+        val enhancedPrompt = "$englishPrompt. High quality, clear details, rich colors. #$folderName"
+
+
         val requestKey = sha256(enhancedPrompt)
 
-        val mutex = synchronized(mutexMap) {
-            mutexMap.getOrPut(requestKey) { Mutex() }
-        }
+        // Берем потокобезопасный мьютекс без synchronized. Он останется в карте для повторных вызовов.
+        val mutex = mutexMap.getOrPut(requestKey) { Mutex() }
 
         try {
             mutex.withLock {
@@ -231,20 +243,28 @@ object ImageGenerator {
                             .host("image.pollinations.ai")
                             .addPathSegment("p")
                             .addPathSegment(enhancedPrompt)
-                            .addQueryParameter("width", "512")
-                            .addQueryParameter("height", "512")
-                            .addQueryParameter("model", "flux")
+                            .addQueryParameter("width", "1024")
+                            .addQueryParameter("height", "1024")
+                            // 🔥 МЕНЯЕМ НА РЕАЛИСТИЧНЫЙ ФЛАКС: убирает "пластиковость" лиц и объектов
+                            .addQueryParameter("model", "flux-realism")
                             .addQueryParameter("seed", randomSeed.toString())
                             .addQueryParameter("nologo", "true")
-                            // ЖЕСТКИЙ ФИЛЬТР: запрещаем китайцев, аниме, современную одежду и корейцев
-                            .addQueryParameter("negative", "asian, chinese, korean, japanese, anime, 3d render, modern clothes, makeup")
+                            // 🔥 ВКЛЮЧАЕМ УЛУЧШИТЕЛЬ ДЕТАЛЕЙ: сервер сам добавит четкости текстурам
+                            .addQueryParameter("enhance", "true")
+                            // ЖЕСТКИЙ ФИЛЬТР: расширяем, чтобы убрать мыло, мутантские пальцы и плохую анатомию
+                            .addQueryParameter("negative", "asian, chinese, korean, japanese, anime, 3d render, modern clothes, makeup, bad anatomy, deformed fingers, blurry, low quality, distorted faces")
                             .build()
+
+                        baseClient.connectionPool.evictAll()
+                        directClient.connectionPool.evictAll()
 
                         val currentProxy = ProxyManager
                             .getProxyForAttempt(attempt)
 
                         val dynamicClient = baseClient.newBuilder()
                             .proxy(currentProxy)
+                            .connectTimeout(20, TimeUnit.SECONDS)
+                            .readTimeout(10, TimeUnit.SECONDS)
                             .build()
 
                         Log.d(TAG, "[IMAGE] '$bookName'. Попытка $attempt")
@@ -341,8 +361,6 @@ object ImageGenerator {
             } // Конец mutex
         } catch (e: Exception) {
             Log.e(TAG, "[IMAGE] Крах блокировки: ${e.localizedMessage}")
-        } finally {
-            synchronized(mutexMap) { mutexMap.remove(bookName) } // Проверь, что тут bookName, а не requestKey!
         }
 
         return@withContext null
@@ -369,4 +387,28 @@ object ImageGenerator {
             .get()
             .build()
     }
+
+    /**
+     * Жесткая очистка всей папки с кэшированными обложками книг.
+     * Вызывать с Dispatchers.IO, чтобы не фризить экран приложения.
+     */
+    fun clearImageCache(context: Context): Boolean {
+        return try {
+            val cacheDir = File(context.cacheDir, "image_cache")
+            if (cacheDir.exists() && cacheDir.isDirectory) {
+                // Удаляем все файлы внутри папки
+                cacheDir.listFiles()?.forEach { file ->
+                    file.delete()
+                }
+                Log.d(TAG, "[CACHE] Папка кэша изображений полностью очищена.")
+                true
+            } else {
+                false
+            }
+        } catch (e: Exception) {
+            Log.e(TAG, "Ошибка при очистке кэша: ${e.localizedMessage}")
+            false
+        }
+    }
+
 }

@@ -32,14 +32,20 @@ import androidx.lifecycle.lifecycleScope
 import com.example.audiobible.generatorAll.ProxyManager
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import androidx.core.content.edit
+import com.airbnb.lottie.Lottie
+import com.airbnb.lottie.LottieAnimationView
+import com.airbnb.lottie.LottieDrawable
+import com.example.audiobible.generatorAll.ImageGenerator
+import kotlinx.coroutines.withContext
 
 @AndroidEntryPoint
 class AppActivity : AppCompatActivity() {
 
     private val viewModel: TrackViewModel by viewModels()
+
     @javax.inject.Inject
     lateinit var bookStateRepository: com.example.audiobible.repository.BookStateRepository
-    private val bookViewModel: com.example.audiobible.viewModels.BookViewModel by viewModels()
 
     private lateinit var binding: ActivityAppBinding
 
@@ -49,7 +55,10 @@ class AppActivity : AppCompatActivity() {
         // ЗАПУСКАТЕЛЬ ДЯТЛА: Качаем базу один раз при старте приложения
         lifecycleScope.launch(Dispatchers.IO) {
             try {
-                Log.d("BREAD_PARSER_LOG", "[PROXY] Инициализация прокси-базы при старте приложения...")
+                Log.d(
+                    "BREAD_PARSER_LOG",
+                    "[PROXY] Инициализация прокси-базы при старте приложения..."
+                )
                 ProxyManager.fetchFreshProxies()
             } catch (e: Exception) {
                 Log.e("BREAD_PARSER_LOG", "[PROXY] Сбой предзагрузки баз: ${e.message}")
@@ -63,6 +72,24 @@ class AppActivity : AppCompatActivity() {
         binding = ActivityAppBinding.inflate(layoutInflater)
         setContentView(binding.root)
 
+        val lottieView = LottieAnimationView(this).apply {
+            setAnimation(R.raw.activity)
+            repeatCount = LottieDrawable.INFINITE
+            playAnimation()
+
+            // КОД ДЛЯ ПЕРЕКРАСКИ ЛИНИИ В БЕЛЫЙ ЦВЕТ:
+            // Маска "**" находит все слои, а "Stroke 1" — это точное название обводки внутри вашего JSON
+            val keyPath = com.airbnb.lottie.model.KeyPath("**", "Stroke 1")
+
+            // Создаем белый фильтр
+            val whiteFilter = com.airbnb.lottie.SimpleColorFilter(android.graphics.Color.WHITE)
+
+            // Применяем фильтр к цвету обводки
+            addValueCallback(keyPath, com.airbnb.lottie.LottieProperty.COLOR_FILTER) { whiteFilter }
+        }
+
+        // Добавляем белый пульс в прозрачный контейнер
+        binding.activityAnimationContainer.addView(lottieView)
         // Слушаем размеры системных окон (включая StatusBar)
         ViewCompat.setOnApplyWindowInsetsListener(binding.root) { _, windowInsets ->
             val statusBarHeight = windowInsets.getInsets(WindowInsetsCompat.Type.statusBars()).top
@@ -152,7 +179,10 @@ class AppActivity : AppCompatActivity() {
     }
 
     // Метод создания и отображения стилизованного парящего меню
-    private fun showFloatingMenu(anchorView: View, navController: androidx.navigation.NavController) {
+    private fun showFloatingMenu(
+        anchorView: View,
+        navController: androidx.navigation.NavController
+    ) {
         val contextWrapper = ContextThemeWrapper(this, R.style.Theme_AudioBible_PopupWrapper)
         val popup = PopupMenu(contextWrapper, anchorView)
 
@@ -184,18 +214,54 @@ class AppActivity : AppCompatActivity() {
         // Add checkbox item for image generation
         val prefs = getSharedPreferences("app_prefs", MODE_PRIVATE)
         val enabled = prefs.getBoolean("generate_images_enabled", false)
-        val toggleItem = menu.add(0, com.example.audiobible.R.id.action_toggle_images, 0, "Генерировать картинки")
+        // ... (ваш старый код добавления пункта "Генерировать картинки") ...
+        val toggleItem = menu.add(
+            0,
+            com.example.audiobible.R.id.action_toggle_images,
+            0,
+            "Генерировать картинки"
+        )
         toggleItem.isCheckable = true
         toggleItem.isChecked = enabled
         val spannableToggle = SpannableString(toggleItem.title.toString())
-        spannableToggle.setSpan(ForegroundColorSpan(Color.WHITE), 0, spannableToggle.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
-        spannableToggle.setSpan(StyleSpan(Typeface.BOLD), 0, spannableToggle.length, Spanned.SPAN_INCLUSIVE_INCLUSIVE)
+        spannableToggle.setSpan(
+            ForegroundColorSpan(Color.WHITE),
+            0,
+            spannableToggle.length,
+            Spanned.SPAN_INCLUSIVE_INCLUSIVE
+        )
+        spannableToggle.setSpan(
+            StyleSpan(Typeface.BOLD),
+            0,
+            spannableToggle.length,
+            Spanned.SPAN_INCLUSIVE_INCLUSIVE
+        )
         toggleItem.title = spannableToggle
+
+        // 🔥 ДОБАВЛЯЕМ СЮДА КНОПКУ ОЧИСТКИ КЭША:
+        val clearItem = menu.add(
+            0,
+            999111,
+            1,
+            "Очистить картинки"
+        ) // 999111 — это временный ID, можно заменить на ваш из R.id
+        val spannableClear = SpannableString(clearItem.title.toString())
+        spannableClear.setSpan(
+            ForegroundColorSpan(Color.RED),
+            0,
+            spannableClear.length,
+            Spanned.SPAN_INCLUSIVE_INCLUSIVE
+        ) // Покрасим в красный
+        spannableClear.setSpan(
+            StyleSpan(Typeface.BOLD),
+            0,
+            spannableClear.length,
+            Spanned.SPAN_INCLUSIVE_INCLUSIVE
+        )
+        clearItem.title = spannableClear
 
         popup.setOnMenuItemClickListener { menuItem ->
             when (menuItem.itemId) {
-//                R.id.signin -> true
-
                 R.id.favorites -> {
                     Log.d("AppActivity", "==> Переход на фрагмент избранных глав")
                     navController.navigate(R.id.favoriteFragment)
@@ -203,46 +269,54 @@ class AppActivity : AppCompatActivity() {
                 }
 
                 R.id.action_toggle_images -> {
-                    val currently = prefs.getBoolean("generate_images_enabled", true)
+                    val currently = prefs.getBoolean("generate_images_enabled", false)
                     val next = !currently
-                    prefs.edit().putBoolean("generate_images_enabled", next).apply()
-
-                    // save per-book state in DB and prefs
-                    val books = bookViewModel.getBooks()
-                    lifecycleScope.launch {
-                        for (b in books) {
-                            val bs = com.example.audiobible.bd.BookState(
-                                bookId = b.id,
-                                name = b.name,
-                                backgroundColor = b.backgroundColor,
-                                selectedChapter = 1,
-                                generateImages = next
-                            )
-                            bookStateRepository.save(bs)
-                        }
-                    }
-
-                    // save per-book prefs for adapter shortcut
-                    val editor = prefs.edit()
-                    for (b in books) {
-                        editor.putBoolean("book_${b.id}_generate_images", next)
-                    }
-                    editor.apply()
-
-                    // visually update the checkbox
+                    prefs.edit { putBoolean("generate_images_enabled", next) }
+                    Log.d(
+                        "AppActivity",
+                        "==> Глобальный режим генерации картинок изменен на: $next"
+                    )
                     menuItem.isChecked = next
                     true
                 }
 
-//                R.id.signup -> {
-//                    navController.navigate(R.id.action_feedFragment_to_fragmentChapter2)
-//                    true
-//                }
+                // 🔥 ОБРАБОТЧИК ДЛЯ КНОПКИ ОЧИСТКИ В ВАШЕМ AppActivity:
+                999111 -> {
+                    // 1. Автоматически переводим флаг генерации в false
+                    prefs.edit { putBoolean("generate_images_enabled", false) }
+
+                    // Обновляем визуальное состояние галочки генерации, если она видна в меню
+                    menu.findItem(com.example.audiobible.R.id.action_toggle_images)?.isChecked =
+                        false
+
+                    lifecycleScope.launch(Dispatchers.IO) {
+                        // 2. Стираем файлы с диска
+                        val success = ImageGenerator.clearImageCache(this@AppActivity)
+
+                        withContext(Dispatchers.Main) {
+                            if (success) {
+                                Log.d(
+                                    "AppActivity",
+                                    "==> Кэш стерт, флаг сброшен в false. Перезапускаем экран..."
+                                )
+
+                                // 3. Перезапускаем текущий экран навигации, чтобы адаптер полностью обновился!
+                                val currentDestination = navController.currentDestination?.id
+                                if (currentDestination != null) {
+                                    navController.popBackStack()
+                                    navController.navigate(currentDestination)
+                                }
+                            }
+                        }
+                    }
+                    true
+                }
 
                 else -> false
             }
         }
         popup.show()
+
     }
 
     // Запрос разрешений на отправку уведомлений для Android 13+

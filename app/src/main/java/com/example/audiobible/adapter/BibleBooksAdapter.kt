@@ -1,7 +1,9 @@
 package com.example.audiobible.adapter
 
 import android.graphics.Color
+import android.util.Log
 import android.view.LayoutInflater
+import android.view.MotionEvent
 import android.view.ViewGroup
 import androidx.core.graphics.toColorInt
 import androidx.recyclerview.widget.DiffUtil
@@ -11,12 +13,10 @@ import com.example.audiobible.databinding.CardBookBinding
 import com.example.audiobible.dto.Book
 import android.view.View
 import com.example.audiobible.generatorAll.ImageGenerator
-//import com.example.audiobible.generatorAll.ImageGenerator
-import com.example.audiobible.generatorAll.ImageGenerator2
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
-import kotlinx.coroutines.withContext
+
 
 class BibleBooksAdapter(
     private val onBookClick: (Book) -> Unit,
@@ -64,12 +64,74 @@ class BibleBooksAdapter(
         holder.bind(bookItem)
     }
 
+    override fun onViewRecycled(holder: BookViewHolder) {
+        super.onViewRecycled(holder)
+        // Гарантированно сбрасываем 3D-параметры View при переиспользовании ячейки
+        holder.itemView.animate().cancel()
+        holder.itemView.rotationX = 0f
+        holder.itemView.rotationY = 0f
+        holder.itemView.scaleX = 1f
+        holder.itemView.scaleY = 1f
+    }
+
     inner class BookViewHolder(
         private val binding: CardBookBinding
     ) : RecyclerView.ViewHolder(binding.root) {
 
+        private fun makeCardAlive(view: View) {
+            view.setOnTouchListener { v, event ->
+                when (event.action) {
+                    MotionEvent.ACTION_DOWN, MotionEvent.ACTION_MOVE -> {
+                        // Вычисляем отклонение пальца от центра карточки
+                        val centerX = v.width / 2f
+                        val centerY = v.height / 2f
+                        val offsetH = (event.x - centerX) / centerX
+                        val offsetV = (event.y - centerY) / centerY
+
+                        // Мягко наклоняем карточку в 3D пространстве
+                        v.animate()
+                            .rotationY(offsetH * 10f)
+                            .rotationX(-offsetV * 10f)
+                            .scaleX(0.97f)
+                            .scaleY(0.97f)
+                            .setDuration(0)
+                            .start()
+                    }
+                    MotionEvent.ACTION_UP -> {
+                        // 🔥 ИСПРАВЛЕНО: Вызываем performClick для поддержки Accessibility и четких кликов
+                        v.performClick()
+
+                        // Возвращаем в исходное плоское состояние
+                        v.animate()
+                            .rotationY(0f)
+                            .rotationX(0f)
+                            .scaleX(1f)
+                            .scaleY(1f)
+                            .setDuration(200)
+                            .start()
+                    }
+                    MotionEvent.ACTION_CANCEL -> {
+                        // Возвращаем в исходное состояние, если жест отменился (например, при скролле списка)
+                        v.animate()
+                            .rotationY(0f)
+                            .rotationX(0f)
+                            .scaleX(1f)
+                            .scaleY(1f)
+                            .setDuration(200)
+                            .start()
+                    }
+                }
+                true // 🔥 Ставим true, чтобы onTouchListener полностью поглощал и корректно обрабатывал цепочку жестов
+            }
+        }
+
         // Полная сборка карточки при первом появлении
+
+        // 🔥 Ссылка на активную корутину загрузки для этой конкретной карточки
+        private var imageLoadJob: kotlinx.coroutines.Job? = null
         fun bind(book: Book) {
+            // 🔥 Мгновенно отменяем прошлую задачу загрузки, если карточка переиспользуется при скролле
+            makeCardAlive(binding.root)
             binding.textViewTitle.text = book.name
 
             // Напрямую связываем визуальное состояние с полем модели данных
@@ -87,57 +149,48 @@ class BibleBooksAdapter(
                 // ignore
             }
 
-            // Check preferences: per-book override or global flag
+            // Читаем ОДНУ чистую глобальную настройку
             val prefs = binding.root.context.getSharedPreferences("app_prefs", android.content.Context.MODE_PRIVATE)
-            val globalEnabled = prefs.getBoolean("generate_images_enabled", true)
-            val perBookKey = "book_${book.id}_generate_images"
-            val perBookEnabled = prefs.contains(perBookKey) && prefs.getBoolean(perBookKey, true)
-            val shouldGenerate = if (prefs.contains(perBookKey)) perBookEnabled else globalEnabled
+            val shouldGenerate = prefs.getBoolean("generate_images_enabled", false)
 
-            if (!shouldGenerate) {
-                // Do not initiate network/generation. However, if cached image exists — show it.
-                CoroutineScope(Dispatchers.IO).launch {
-                    try {
+            Log.e("BREAD_PARSER_LOG", "[TEST] Книга: ${book.name}, Галочка в адаптере видит shouldGenerate = $shouldGenerate")
+
+           // Сохраняем имя книги прямо в тег ImageView, чтобы сопоставить её после фоновой загрузки
+            binding.imageViewCover.tag = book.name
+            // 🔥 Запускаем одну контролируемую задачу на Main диспетчере
+            imageLoadJob = CoroutineScope(Dispatchers.Main).launch {
+                try {
+                    if (!shouldGenerate) {
                         val cached = ImageGenerator.getCachedImage(binding.root.context, book.name)
-                        withContext(Dispatchers.Main) {
-                            if (cached != null) {
-                                binding.imageViewCover.setImageBitmap(cached)
-                                binding.imageViewCover.visibility = View.VISIBLE
-                                binding.overlayView.visibility = View.VISIBLE
-                            } else {
-                                binding.imageViewCover.setImageDrawable(null)
-                                binding.imageViewCover.visibility = View.GONE
-                                binding.overlayView.visibility = View.GONE
-                            }
+                        // Проверяем, что карточку не переиспользовали для другой книги за время чтения с диска
+                        if (cached != null && binding.imageViewCover.tag == book.name) {
+                            binding.imageViewCover.setImageBitmap(cached)
+                            binding.imageViewCover.visibility = View.VISIBLE
+                            binding.overlayView.visibility = View.VISIBLE
                         }
-                    } catch (e: Exception) {
-                        withContext(Dispatchers.Main) {
-                            binding.imageViewCover.visibility = View.GONE
-                            binding.overlayView.visibility = View.GONE
-                        }
-                    }
-                }
-            } else {
-                // Генерируем фон для всех карточек (если нет в кэше, с локальной блокировкой)
-                CoroutineScope(Dispatchers.Main).launch {
-                    try {
-                        val bmp = ImageGenerator.generateImageForBook(binding.root.context, book.name)
-                        if (bmp != null) {
+                    } else {
+                        // Спокойно качаем в фоне, корутина больше не прервется при скролле!
+                        val bmp = ImageGenerator.generateImageForBook(binding.root.context, book.name, book.folderName)
+
+                        // 🔥 КРИТИЧЕСКИ ВАЖНАЯ ПРОВЕРКА: ставим картинку только если холдер всё еще показывает ЭТУ книгу
+                        if (bmp != null && binding.imageViewCover.tag == book.name) {
                             binding.imageViewCover.setImageBitmap(bmp)
                             binding.imageViewCover.visibility = View.VISIBLE
                             binding.overlayView.visibility = View.VISIBLE
-                        } else {
-                            binding.imageViewCover.visibility = View.GONE
-                            binding.overlayView.visibility = View.GONE
+                            Log.d("BREAD_PARSER_LOG", "[RENDER] Картинка для '${book.name}' успешно отображена.")
+                        } else if (bmp != null) {
+                            // Если карточка уехала, картинка просто тихо сохранилась в кэш внутри ImageGenerator.
+                            // Когда юзер доскроллит до этой книги обратно, она мгновенно подгрузится из кэша.
+                            Log.d("BREAD_PARSER_LOG", "[BACKGROUND] ФОНОВАЯ ЗАГРУЗКА ЗАВЕРШЕНА: '${book.name}' сохранена в кэш.")
                         }
-                    } catch (e: Exception) {
-                        // не критично — оставляем пустое изображение
+                    }
+                } catch (e: Exception) {
+                    if (binding.imageViewCover.tag == book.name) {
                         binding.imageViewCover.visibility = View.GONE
                         binding.overlayView.visibility = View.GONE
                     }
                 }
             }
-
             // Клик по всей карточке для перехода на фрагмент с главами
             binding.root.setOnClickListener {
                 onBookClick(book)
@@ -238,6 +291,8 @@ class BibleBooksAdapter(
                 super.getChangePayload(oldItem, newItem)
             }
         }
+
+
 
         companion object {
             const val PAYLOAD_SELECTION_CHANGED = "payload_selection_changed"
